@@ -374,12 +374,13 @@
 // }
 
 function throwDetectionError(error) {
-	document.querySelector(".webgpu-not-supported").style.visibility =
-		"visible";
+	(
+		document.querySelector(".webgpu-not-supported") as HTMLElement
+	).style.visibility = "visible";
 	throw new Error("Could not initialize WebGPU: " + error);
 }
 
-async function requestDevice(options = {}) {
+async function requestDevice(options: GPURequestAdapterOptions = {}) {
 	if (!navigator.gpu) throwDetectionError("WebGPU NOT Supported");
 
 	const adapter = await navigator.gpu.requestAdapter(options);
