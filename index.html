@@ -27,7 +27,9 @@
 		</style>
 		<script src="libraries/dat.gui.min.js"></script>
 		<script src="libraries/ccapture.all.min.js"></script>
+
 		<script src="src/utils.js"></script>
+		<script src="src/index.js"></script>
 	</head>
 
 	<body>
@@ -48,23 +50,7 @@
 		</div>
 
 		<script type="module">
-			const device = await requestDevice({
-				powerPreference: "high-performance",
-			});
-			const context = document
-				.querySelector("canvas")
-				.getContext("webgpu");
-
-			if (!context) throwDetectionError("Canvas does not support WebGPU");
-			context.configure({
-				device: device,
-				format: navigator.gpu.getPreferredCanvasFormat(),
-				usage: GPUTextureUsage.RENDER_ATTACHMENT,
-				alphaMode: "opaque",
-			});
-
-			const command = device.createCommandEncoder();
-			const texture = context.getCurrentTexture();
+			index();
 		</script>
 
 		<!-- <script src="src/init.js"></script>
