@@ -4,3 +4,7 @@
 node_modules
 *.js.map
 *.js
+
+# webpack
+dist
+!webpack.config.js

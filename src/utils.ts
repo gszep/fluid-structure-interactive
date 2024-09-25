@@ -373,14 +373,30 @@
 // 	}
 // }
 
-function throwDetectionError(error) {
+function throwDetectionError(error: string): never {
 	(
 		document.querySelector(".webgpu-not-supported") as HTMLElement
 	).style.visibility = "visible";
 	throw new Error("Could not initialize WebGPU: " + error);
 }
 
-async function requestDevice(options: GPURequestAdapterOptions = {}) {
+async function createShaderModule(
+	device: GPUDevice,
+	descriptor: GPUShaderModuleDescriptor
+): Promise<GPUShaderModule> {
+	return fetch(descriptor.code)
+		.then((file) => {
+			return file.text();
+		})
+		.then((code) => {
+			descriptor.code = code;
+			return device.createShaderModule(descriptor);
+		});
+}
+
+async function requestDevice(
+	options: GPURequestAdapterOptions = {}
+): Promise<GPUDevice> {
 	if (!navigator.gpu) throwDetectionError("WebGPU NOT Supported");
 
 	const adapter = await navigator.gpu.requestAdapter(options);
@@ -388,3 +404,5 @@ async function requestDevice(options: GPURequestAdapterOptions = {}) {
 
 	return adapter.requestDevice();
 }
+
+export { requestDevice, createShaderModule, throwDetectionError };
