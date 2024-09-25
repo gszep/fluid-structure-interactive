@@ -1,8 +1,5 @@
-import {
-	requestDevice,
-	createShaderModule,
-	throwDetectionError,
-} from "./utils";
+import { requestDevice, throwDetectionError } from "./utils";
+import cellShader from "./shaders/cell.wgsl";
 
 async function index(): Promise<void> {
 	const device = await requestDevice({
@@ -51,10 +48,12 @@ async function index(): Promise<void> {
 			},
 		],
 	};
-	// const cellShaderModule = await createShaderModule(device, {
-	// 	label: "Cell shader",
-	// 	code: "./src/shaders/cell.wgsl",
-	// });
+
+	const cellShaderModule = device.createShaderModule({
+		code: cellShader,
+		label: "Cell Shader",
+	});
+
 	const command = device.createCommandEncoder();
 
 	const pass = command.beginRenderPass({

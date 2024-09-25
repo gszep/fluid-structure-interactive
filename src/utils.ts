@@ -380,20 +380,6 @@ function throwDetectionError(error: string): never {
 	throw new Error("Could not initialize WebGPU: " + error);
 }
 
-async function createShaderModule(
-	device: GPUDevice,
-	descriptor: GPUShaderModuleDescriptor
-): Promise<GPUShaderModule> {
-	return fetch(descriptor.code)
-		.then((file) => {
-			return file.text();
-		})
-		.then((code) => {
-			descriptor.code = code;
-			return device.createShaderModule(descriptor);
-		});
-}
-
 async function requestDevice(
 	options: GPURequestAdapterOptions = {}
 ): Promise<GPUDevice> {
@@ -405,4 +391,4 @@ async function requestDevice(
 	return adapter.requestDevice();
 }
 
-export { requestDevice, createShaderModule, throwDetectionError };
+export { requestDevice, throwDetectionError };
