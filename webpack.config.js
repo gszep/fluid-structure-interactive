@@ -5,7 +5,6 @@ module.exports = {
 	mode: "development",
 	entry: {
 		index: "./src/index.ts",
-		utils: "./src/utils.ts",
 	},
 	devtool: "inline-source-map",
 	devServer: {
@@ -14,6 +13,7 @@ module.exports = {
 	plugins: [
 		new HtmlWebpackPlugin({
 			title: "Fluid Structure Interactive",
+			template: "src/index.html",
 		}),
 	],
 	module: {
