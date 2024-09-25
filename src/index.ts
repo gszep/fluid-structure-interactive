@@ -1,7 +1,10 @@
 import { requestDevice, configureCanvas } from "./utils";
-import cellShader from "./shaders/cell.wgsl";
+import cellVertexShader from "./shaders/cell.vert.wgsl";
+import cellFragmentShader from "./shaders/cell.frag.wgsl";
 
 const GRID_SIZE = 32;
+const UPDATE_INTERVAL = 200;
+let frame_index = 0;
 
 async function index(): Promise<void> {
 	// setup and configure WebGPU
@@ -15,17 +18,14 @@ async function index(): Promise<void> {
 	});
 
 	// compile shaders
-	const cellShaderModule = device.createShaderModule({
-		code: cellShader,
-		label: "Cell Shader",
-	});
-
 	const cellPipeline = device.createRenderPipeline({
 		label: "Cell pipeline",
 		layout: "auto",
 		vertex: {
-			module: cellShaderModule,
-			entryPoint: "vertexMain",
+			module: device.createShaderModule({
+				code: cellVertexShader,
+				label: "cellVertexShader",
+			}),
 			buffers: [
 				{
 					arrayStride: 8,
@@ -40,8 +40,10 @@ async function index(): Promise<void> {
 			],
 		},
 		fragment: {
-			module: cellShaderModule,
-			entryPoint: "fragmentMain",
+			module: device.createShaderModule({
+				code: cellFragmentShader,
+				label: "cellFragmentShader",
+			}),
 			targets: [
 				{
 					format: format,
@@ -50,7 +52,7 @@ async function index(): Promise<void> {
 		},
 	});
 
-	// vertex buffer
+	// vertex buffers
 	const vertices = new Float32Array([
 		-0.8, -0.8, 0.8, -0.8, 0.8, 0.8, -0.8, -0.8, 0.8, 0.8, -0.8, 0.8,
 	]);
@@ -67,7 +69,7 @@ async function index(): Promise<void> {
 		/*data=*/ vertices
 	);
 
-	// grid size uniform buffer
+	// uniform buffers
 	const gridSizeArray = new Float32Array([GRID_SIZE, GRID_SIZE]);
 	const gridSizeBuffer = device.createBuffer({
 		label: "Grid size",
@@ -81,39 +83,79 @@ async function index(): Promise<void> {
 		/*data=*/ gridSizeArray
 	);
 
-	const bindGroup = device.createBindGroup({
-		label: "Cell renderer bind group",
-		layout: cellPipeline.getBindGroupLayout(0),
-		entries: [
-			{
-				binding: 0,
-				resource: { buffer: gridSizeBuffer },
-			},
-		],
-	});
+	// storage buffers
+	const stateArray = new Uint32Array(GRID_SIZE * GRID_SIZE);
 
-	const command = device.createCommandEncoder();
+	const stateBuffers = ["A", "B"].map((label) =>
+		device.createBuffer({
+			label: `State Buffer ${label}`,
+			size: stateArray.byteLength,
+			usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+		})
+	);
 
-	const pass = command.beginRenderPass({
-		colorAttachments: [
-			{
-				view: context.getCurrentTexture().createView(),
-				loadOp: "clear",
-				clearValue: [0, 0.2, 0.7, 1],
-				storeOp: "store",
-			},
-		],
-	});
+	for (let i = 0; i < stateArray.length; i += 3) {
+		stateArray[i] = 1;
+	}
+	device.queue.writeBuffer(
+		stateBuffers[0],
+		/*bufferOffset=*/ 0,
+		/*data=*/ stateArray
+	);
 
-	pass.setPipeline(cellPipeline);
-	pass.setVertexBuffer(0, vertexBuffer);
+	for (let i = 0; i < stateArray.length; i++) {
+		stateArray[i] = i % 2;
+	}
+	device.queue.writeBuffer(
+		stateBuffers[1],
+		/*bufferOffset=*/ 0,
+		/*data=*/ stateArray
+	);
 
-	pass.setBindGroup(0, bindGroup);
-	pass.draw(vertices.length / 2, GRID_SIZE * GRID_SIZE);
+	const bindGroups = stateBuffers.map((buffer) =>
+		device.createBindGroup({
+			label: `Bind Group > ${buffer.label}`,
+			layout: cellPipeline.getBindGroupLayout(0),
+			entries: [
+				{
+					binding: 0,
+					resource: { buffer: gridSizeBuffer },
+				},
+				{
+					binding: 1,
+					resource: { buffer: buffer },
+				},
+			],
+		})
+	);
 
-	pass.end();
-	device.queue.submit([command.finish()]);
+	function render() {
+		// begin render pass
+		const command = device.createCommandEncoder();
+		const pass = command.beginRenderPass({
+			colorAttachments: [
+				{
+					view: context.getCurrentTexture().createView(),
+					loadOp: "clear",
+					clearValue: [1, 1, 1, 1],
+					storeOp: "store",
+				},
+			],
+		});
 
+		// draw
+		pass.setPipeline(cellPipeline);
+		pass.setBindGroup(0, bindGroups[frame_index % 2]);
+		pass.setVertexBuffer(0, vertexBuffer);
+		pass.draw(vertices.length / 2, GRID_SIZE * GRID_SIZE);
+
+		// finalise render pass and submit the command buffer
+		pass.end();
+		device.queue.submit([command.finish()]);
+		frame_index++;
+	}
+
+	setInterval(render, UPDATE_INTERVAL);
 	return;
 }
 
