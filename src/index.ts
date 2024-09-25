@@ -12,7 +12,7 @@ async function index(): Promise<void> {
 	canvas.height = 512;
 	document.body.appendChild(canvas);
 
-	const context = document.querySelector("canvas").getContext("webgpu");
+	const context = document.querySelector("canvas")!.getContext("webgpu");
 
 	if (!context) throwDetectionError("Canvas does not support WebGPU");
 	context.configure({
