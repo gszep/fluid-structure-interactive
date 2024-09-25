@@ -1,27 +1,56 @@
-import { requestDevice, throwDetectionError } from "./utils";
+import { requestDevice, configureCanvas } from "./utils";
 import cellShader from "./shaders/cell.wgsl";
 
+const GRID_SIZE = 32;
+
 async function index(): Promise<void> {
+	// setup and configure WebGPU
 	const device = await requestDevice({
 		powerPreference: "high-performance",
 	});
 
-	// add canvas to the document
-	const canvas = document.createElement("canvas");
-	canvas.width = 512;
-	canvas.height = 512;
-	document.body.appendChild(canvas);
-
-	const context = document.querySelector("canvas")!.getContext("webgpu");
-
-	if (!context) throwDetectionError("Canvas does not support WebGPU");
-	context.configure({
-		device: device,
-		format: navigator.gpu.getPreferredCanvasFormat(),
-		usage: GPUTextureUsage.RENDER_ATTACHMENT,
-		alphaMode: "opaque",
+	const { context, format } = configureCanvas(device, {
+		width: 512,
+		height: 512,
 	});
 
+	// compile shaders
+	const cellShaderModule = device.createShaderModule({
+		code: cellShader,
+		label: "Cell Shader",
+	});
+
+	const cellPipeline = device.createRenderPipeline({
+		label: "Cell pipeline",
+		layout: "auto",
+		vertex: {
+			module: cellShaderModule,
+			entryPoint: "vertexMain",
+			buffers: [
+				{
+					arrayStride: 8,
+					attributes: [
+						{
+							format: "float32x2",
+							offset: 0,
+							shaderLocation: 0, // Position, see vertex shader
+						},
+					],
+				},
+			],
+		},
+		fragment: {
+			module: cellShaderModule,
+			entryPoint: "fragmentMain",
+			targets: [
+				{
+					format: format,
+				},
+			],
+		},
+	});
+
+	// vertex buffer
 	const vertices = new Float32Array([
 		-0.8, -0.8, 0.8, -0.8, 0.8, 0.8, -0.8, -0.8, 0.8, 0.8, -0.8, 0.8,
 	]);
@@ -38,20 +67,29 @@ async function index(): Promise<void> {
 		/*data=*/ vertices
 	);
 
-	const vertexBufferLayout = {
-		arrayStride: 8,
-		attributes: [
+	// grid size uniform buffer
+	const gridSizeArray = new Float32Array([GRID_SIZE, GRID_SIZE]);
+	const gridSizeBuffer = device.createBuffer({
+		label: "Grid size",
+		size: gridSizeArray.byteLength,
+		usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+	});
+
+	device.queue.writeBuffer(
+		gridSizeBuffer,
+		/*bufferOffset=*/ 0,
+		/*data=*/ gridSizeArray
+	);
+
+	const bindGroup = device.createBindGroup({
+		label: "Cell renderer bind group",
+		layout: cellPipeline.getBindGroupLayout(0),
+		entries: [
 			{
-				format: "float32x2",
-				offset: 0,
-				shaderLocation: 0, // Position, see vertex shader
+				binding: 0,
+				resource: { buffer: gridSizeBuffer },
 			},
 		],
-	};
-
-	const cellShaderModule = device.createShaderModule({
-		code: cellShader,
-		label: "Cell Shader",
 	});
 
 	const command = device.createCommandEncoder();
@@ -66,6 +104,12 @@ async function index(): Promise<void> {
 			},
 		],
 	});
+
+	pass.setPipeline(cellPipeline);
+	pass.setVertexBuffer(0, vertexBuffer);
+
+	pass.setBindGroup(0, bindGroup);
+	pass.draw(vertices.length / 2, GRID_SIZE * GRID_SIZE);
 
 	pass.end();
 	device.queue.submit([command.finish()]);

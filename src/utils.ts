@@ -391,4 +391,25 @@ async function requestDevice(
 	return adapter.requestDevice();
 }
 
-export { requestDevice, throwDetectionError };
+function configureCanvas(
+	device: GPUDevice,
+	attributes = { width: 512, height: 512 }
+): { context: GPUCanvasContext; format: GPUTextureFormat } {
+	const canvas = Object.assign(document.createElement("canvas"), attributes);
+	document.body.appendChild(canvas);
+
+	const context = document.querySelector("canvas")!.getContext("webgpu");
+	if (!context) throwDetectionError("Canvas does not support WebGPU");
+
+	const format = navigator.gpu.getPreferredCanvasFormat();
+	context.configure({
+		device: device,
+		format: format,
+		usage: GPUTextureUsage.RENDER_ATTACHMENT,
+		alphaMode: "opaque",
+	});
+
+	return { context, format };
+}
+
+export { requestDevice, configureCanvas };
