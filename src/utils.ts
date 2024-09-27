@@ -412,4 +412,9 @@ function configureCanvas(
 	return { context, format };
 }
 
-export { requestDevice, configureCanvas };
+function setValues(code: string, variables: Record<string, any>): string {
+	const reg = new RegExp(Object.keys(variables).join("|"), "g");
+	return code.replace(reg, (k) => variables[k].toString());
+}
+
+export { requestDevice, configureCanvas, setValues };
