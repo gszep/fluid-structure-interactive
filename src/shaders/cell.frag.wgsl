@@ -6,7 +6,7 @@ struct Output {
   @location(0) color: vec4<f32>
 };
 
-@group(0) @binding(1) var state: texture_storage_2d<r32float, read>;
+@group(0) @binding(1) var state: texture_storage_2d<FORMAT, read>;
 
 @fragment
 fn main(input: Input) -> Output {

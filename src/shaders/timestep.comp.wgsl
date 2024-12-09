@@ -2,11 +2,11 @@ struct Input {
   @builtin(global_invocation_id) position: vec3<u32>,
 };
 
-@group(0) @binding(1) var inputState: texture_storage_2d<r32float, read>;
-@group(0) @binding(2) var outputState: texture_storage_2d<r32float, write>;
+@group(0) @binding(1) var inputState: texture_storage_2d<FORMAT, read>;
+@group(0) @binding(2) var outputState: texture_storage_2d<FORMAT, write>;
 
-fn state(position: vec2<i32>) -> u32 {
-    return u32(textureLoad(inputState, position).r);
+fn state(position: vec2<i32>) -> vec4<f32> {
+    return textureLoad(inputState, position);
 }
 
 @compute @workgroup_size(WORKGROUP_SIZE, WORKGROUP_SIZE)
@@ -14,7 +14,7 @@ fn main(input: Input) {
 
     let position = vec2<i32>(input.position.xy);
     let boundary = vec2<i32>(textureDimensions(inputState));
-    var neighbors = 0u;
+    var neighbors = vec3<u32>(0, 0, 0);
 
     var dI = vec2<i32>(0, 0);
     for (var i: i32 = -1; i < 2; i = i + 1) {
@@ -29,23 +29,24 @@ fn main(input: Input) {
             }
 
             // periodic boundary conditions
-            neighbors += state((position + dI) % boundary);
+            neighbors += vec3<u32>(state((position + dI) % boundary).rgb);
         }
     }
 
     // Conway's game of life rules
-    var next_state: f32;
-    switch neighbors {
-        case 2: {
-            next_state = f32(state(position));
-        }
-        case 3: {
-            next_state = 1.0;
-        }
-        default: {
-            next_state = 0.0;
+    var next_state = vec4<f32>(0, 0, 0, 1);
+    for (var k: i32 = 0; k < 3; k = k + 1) {
+        switch neighbors[k] {
+            case 2: {
+                next_state[k] = state(position)[k];
+            }
+            case 3: {
+                next_state[k] = 1;
+            }
+            default: {
+                next_state[k] = 0;
+            }
         }
     }
-    var color = vec4<f32>(next_state, next_state, next_state, 1.0);
-    textureStore(outputState, position, color);
+    textureStore(outputState, position, next_state);
 }

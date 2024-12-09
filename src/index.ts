@@ -3,6 +3,7 @@ import cellVertexShader from "./shaders/cell.vert.wgsl";
 import cellFragmentShader from "./shaders/cell.frag.wgsl";
 import timestepComputeShader from "./shaders/timestep.comp.wgsl";
 
+const FORMAT = "rgba32float";
 const GRID_SIZE = 512;
 const WORKGROUP_SIZE = 8;
 const WORKGROUP_COUNT = Math.ceil(GRID_SIZE / WORKGROUP_SIZE);
@@ -33,12 +34,12 @@ async function index(): Promise<void> {
 			{
 				binding: 1,
 				visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE,
-				storageTexture: { access: "read-only", format: "r32float" },
+				storageTexture: { access: "read-only", format: FORMAT },
 			},
 			{
 				binding: 2,
 				visibility: GPUShaderStage.COMPUTE,
-				storageTexture: { access: "read-write", format: "r32float" },
+				storageTexture: { access: "write-only", format: FORMAT },
 			},
 		],
 	});
@@ -56,6 +57,7 @@ async function index(): Promise<void> {
 				label: "timestepComputeShader",
 				code: setValues(timestepComputeShader, {
 					WORKGROUP_SIZE: WORKGROUP_SIZE,
+					FORMAT: FORMAT,
 				}),
 			}),
 		},
@@ -84,7 +86,9 @@ async function index(): Promise<void> {
 		},
 		fragment: {
 			module: device.createShaderModule({
-				code: cellFragmentShader,
+				code: setValues(cellFragmentShader, {
+					FORMAT: FORMAT,
+				}),
 				label: "cellFragmentShader",
 			}),
 			targets: [
@@ -110,27 +114,32 @@ async function index(): Promise<void> {
 	);
 
 	// storage textures
-	const textureData = new Float32Array(GRID_SIZE * GRID_SIZE);
+	const textureData = new Array(GRID_SIZE * GRID_SIZE);
 	for (let i = 0; i < GRID_SIZE * GRID_SIZE; i++) {
-		textureData[i] = Math.random() > 0.5 ? 1 : 0;
+		textureData[i] = [
+			Math.random() > 0.5 ? 1 : 0,
+			Math.random() > 0.5 ? 1 : 0,
+			Math.random() > 0.5 ? 1 : 0,
+			1,
+		];
 	}
 
 	const stateTextures = ["A", "B"].map((label) =>
 		device.createTexture({
 			label: `State Texture ${label}`,
 			size: [GRID_SIZE, GRID_SIZE],
-			format: "r32float",
+			format: FORMAT,
 			usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_DST,
 		})
 	);
 	const texture = stateTextures[0];
 	device.queue.writeTexture(
 		{ texture },
-		/*data=*/ textureData,
+		/*data=*/ new Float32Array(textureData.flat()),
 		/*dataLayout=*/ {
-			// offset: 0,
-			bytesPerRow: 4 * GRID_SIZE,
-			// rowsPerImage: GRID_SIZE,
+			offset: 0,
+			bytesPerRow: 16 * GRID_SIZE,
+			rowsPerImage: GRID_SIZE,
 		},
 		/*size=*/ {
 			width: GRID_SIZE,
