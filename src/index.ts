@@ -29,15 +29,10 @@ async function index(): Promise<void> {
 			{
 				binding: 0,
 				visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE,
-				sampler: { type: "filtering" },
-			},
-			{
-				binding: 1,
-				visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE,
 				storageTexture: { access: "read-only", format: FORMAT },
 			},
 			{
-				binding: 2,
+				binding: 1,
 				visibility: GPUShaderStage.COMPUTE,
 				storageTexture: { access: "write-only", format: FORMAT },
 			},
@@ -154,14 +149,10 @@ async function index(): Promise<void> {
 			entries: [
 				{
 					binding: 0,
-					resource: device.createSampler(),
-				},
-				{
-					binding: 1,
 					resource: stateTextures[i % 2].createView(),
 				},
 				{
-					binding: 2,
+					binding: 1,
 					resource: stateTextures[(i + 1) % 2].createView(),
 				},
 			],

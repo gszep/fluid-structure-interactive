@@ -2,8 +2,8 @@ struct Input {
   @builtin(global_invocation_id) position: vec3<u32>,
 };
 
-@group(0) @binding(1) var inputState: texture_storage_2d<FORMAT, read>;
-@group(0) @binding(2) var outputState: texture_storage_2d<FORMAT, write>;
+@group(0) @binding(0) var inputState: texture_storage_2d<FORMAT, read>;
+@group(0) @binding(1) var outputState: texture_storage_2d<FORMAT, write>;
 
 fn state(position: vec2<i32>) -> vec4<f32> {
     return textureLoad(inputState, position);
