@@ -3,11 +3,11 @@ import cellVertexShader from "./shaders/cell.vert.wgsl";
 import cellFragmentShader from "./shaders/cell.frag.wgsl";
 import timestepComputeShader from "./shaders/timestep.comp.wgsl";
 
-const GRID_SIZE = 32;
+const GRID_SIZE = 512;
 const WORKGROUP_SIZE = 8;
 const WORKGROUP_COUNT = Math.ceil(GRID_SIZE / WORKGROUP_SIZE);
 
-const UPDATE_INTERVAL = 200;
+const UPDATE_INTERVAL = 1;
 let frame_index = 0;
 
 async function index(): Promise<void> {
@@ -27,21 +27,18 @@ async function index(): Promise<void> {
 		entries: [
 			{
 				binding: 0,
-				visibility:
-					GPUShaderStage.VERTEX |
-					GPUShaderStage.FRAGMENT |
-					GPUShaderStage.COMPUTE,
-				buffer: { type: "uniform" }, // Grid size buffer
+				visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE,
+				sampler: { type: "filtering" },
 			},
 			{
 				binding: 1,
-				visibility: GPUShaderStage.VERTEX | GPUShaderStage.COMPUTE,
-				buffer: { type: "read-only-storage" }, // state input buffer
+				visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE,
+				storageTexture: { access: "read-only", format: "r32float" },
 			},
 			{
 				binding: 2,
 				visibility: GPUShaderStage.COMPUTE,
-				buffer: { type: "storage" }, // state output buffer
+				storageTexture: { access: "read-write", format: "r32float" },
 			},
 		],
 	});
@@ -74,7 +71,7 @@ async function index(): Promise<void> {
 			}),
 			buffers: [
 				{
-					arrayStride: 8,
+					arrayStride: 8, // sizeof(float32) x 2
 					attributes: [
 						{
 							format: "float32x2",
@@ -99,9 +96,7 @@ async function index(): Promise<void> {
 	});
 
 	// vertex buffers
-	const vertices = new Float32Array([
-		-0.8, -0.8, 0.8, -0.8, 0.8, 0.8, -0.8, -0.8, 0.8, 0.8, -0.8, 0.8,
-	]);
+	const vertices = new Float32Array([0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1]);
 
 	const vertexBuffer = device.createBuffer({
 		label: "Vertices",
@@ -114,55 +109,51 @@ async function index(): Promise<void> {
 		/*data=*/ vertices
 	);
 
-	// uniform buffers
-	const gridSizeArray = new Float32Array([GRID_SIZE, GRID_SIZE]);
-
-	const gridSizeBuffer = device.createBuffer({
-		label: "Grid size",
-		size: gridSizeArray.byteLength,
-		usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-	});
-	device.queue.writeBuffer(
-		gridSizeBuffer,
-		/*bufferOffset=*/ 0,
-		/*data=*/ gridSizeArray
-	);
-
-	// storage buffers
-	const stateArray = new Uint32Array(GRID_SIZE * GRID_SIZE);
-	for (let i = 0; i < stateArray.length; ++i) {
-		stateArray[i] = Math.random() > 0.6 ? 1 : 0;
+	// storage textures
+	const textureData = new Float32Array(GRID_SIZE * GRID_SIZE);
+	for (let i = 0; i < GRID_SIZE * GRID_SIZE; i++) {
+		textureData[i] = Math.random() > 0.5 ? 1 : 0;
 	}
 
-	const stateBuffers = ["A", "B"].map((label) =>
-		device.createBuffer({
-			label: `State Buffer ${label}`,
-			size: stateArray.byteLength,
-			usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+	const stateTextures = ["A", "B"].map((label) =>
+		device.createTexture({
+			label: `State Texture ${label}`,
+			size: [GRID_SIZE, GRID_SIZE],
+			format: "r32float",
+			usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_DST,
 		})
 	);
-	device.queue.writeBuffer(
-		stateBuffers[0],
-		/*bufferOffset=*/ 0,
-		/*data=*/ stateArray
+	const texture = stateTextures[0];
+	device.queue.writeTexture(
+		{ texture },
+		/*data=*/ textureData,
+		/*dataLayout=*/ {
+			// offset: 0,
+			bytesPerRow: 4 * GRID_SIZE,
+			// rowsPerImage: GRID_SIZE,
+		},
+		/*size=*/ {
+			width: GRID_SIZE,
+			height: GRID_SIZE,
+		}
 	);
 
 	const bindGroups = [0, 1].map((i) =>
 		device.createBindGroup({
-			label: `Bind Group > ${stateBuffers[i].label}`,
+			label: `Bind Group > ${stateTextures[i].label}`,
 			layout: bindGroupLayout,
 			entries: [
 				{
 					binding: 0,
-					resource: { buffer: gridSizeBuffer },
+					resource: device.createSampler(),
 				},
 				{
 					binding: 1,
-					resource: { buffer: stateBuffers[i % 2] },
+					resource: stateTextures[i % 2].createView(),
 				},
 				{
 					binding: 2,
-					resource: { buffer: stateBuffers[(i + 1) % 2] },
+					resource: stateTextures[(i + 1) % 2].createView(),
 				},
 			],
 		})
@@ -196,7 +187,7 @@ async function index(): Promise<void> {
 		renderPass.setPipeline(renderPipeline);
 		renderPass.setBindGroup(0, bindGroups[frame_index % 2]);
 		renderPass.setVertexBuffer(0, vertexBuffer);
-		renderPass.draw(vertices.length / 2, GRID_SIZE * GRID_SIZE);
+		renderPass.draw(vertices.length / 2);
 		renderPass.end();
 
 		// submit the command buffer

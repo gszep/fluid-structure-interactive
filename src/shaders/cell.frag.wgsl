@@ -1,17 +1,19 @@
 struct Input {
-  @location(0) cell: vec2<f32>,
+  @location(0) @interpolate(linear, center) coordinate: vec2<f32>,
 };
 
 struct Output {
   @location(0) color: vec4<f32>
 };
 
-@group(0) @binding(0) var<uniform> grid: vec2<f32>;
+@group(0) @binding(1) var state: texture_storage_2d<r32float, read>;
 
 @fragment
 fn main(input: Input) -> Output {
     var output: Output;
-    let color = input.cell / grid;
-    output.color = vec4<f32>(color, 1 - color.g, 1);
+
+    let uv = vec2<u32>(input.coordinate * vec2<f32>(textureDimensions(state)));
+    output.color = textureLoad(state, uv);
+
     return output;
 }

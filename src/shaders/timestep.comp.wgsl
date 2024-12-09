@@ -2,23 +2,18 @@ struct Input {
   @builtin(global_invocation_id) position: vec3<u32>,
 };
 
-@group(0) @binding(0) var<uniform> grid: vec2<f32>;
-@group(0) @binding(1) var<storage> inputState: array<u32>;
-@group(0) @binding(2) var<storage, read_write> outputState: array<u32>;
-
-fn instance_index(position: vec2<i32>) -> i32 {
-    return position.y * i32(grid.x) + position.x;
-}
+@group(0) @binding(1) var inputState: texture_storage_2d<r32float, read>;
+@group(0) @binding(2) var outputState: texture_storage_2d<r32float, write>;
 
 fn state(position: vec2<i32>) -> u32 {
-    return inputState[instance_index(position)];
+    return u32(textureLoad(inputState, position).r);
 }
 
 @compute @workgroup_size(WORKGROUP_SIZE, WORKGROUP_SIZE)
 fn main(input: Input) {
 
     let position = vec2<i32>(input.position.xy);
-    let boundary = vec2<i32>(grid);
+    let boundary = vec2<i32>(textureDimensions(inputState));
     var neighbors = 0u;
 
     var dI = vec2<i32>(0, 0);
@@ -39,16 +34,18 @@ fn main(input: Input) {
     }
 
     // Conway's game of life rules
-    let i = instance_index(position);
+    var next_state: f32;
     switch neighbors {
         case 2: {
-            outputState[i] = inputState[i];
+            next_state = f32(state(position));
         }
         case 3: {
-            outputState[i] = 1u;
+            next_state = 1.0;
         }
         default: {
-            outputState[i] = 0u;
+            next_state = 0.0;
         }
     }
+    var color = vec4<f32>(next_state, next_state, next_state, 1.0);
+    textureStore(outputState, position, color);
 }
