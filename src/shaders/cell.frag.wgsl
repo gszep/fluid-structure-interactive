@@ -1,12 +1,12 @@
 struct Input {
-  @location(0) @interpolate(linear, center) coordinate: vec2<f32>,
+  @location(VERTEX_INDEX) @interpolate(linear, center) coordinate: vec2<f32>,
 };
 
 struct Output {
-  @location(0) color: vec4<f32>
+  @location(RENDER_INDEX) color: vec4<f32>
 };
 
-@group(0) @binding(0) var state: texture_storage_2d<FORMAT, read>;
+@group(GROUP_INDEX) @binding(READ_BINDING) var state: texture_storage_2d<FORMAT, read>;
 
 @fragment
 fn main(input: Input) -> Output {
