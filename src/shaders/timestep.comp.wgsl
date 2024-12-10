@@ -2,24 +2,19 @@ struct Input {
   @builtin(global_invocation_id) position: vec3<u32>,
 };
 
-@group(0) @binding(0) var<uniform> grid: vec2<f32>;
-@group(0) @binding(1) var<storage> inputState: array<u32>;
-@group(0) @binding(2) var<storage, read_write> outputState: array<u32>;
+@group(GROUP_INDEX) @binding(READ_BINDING) var inputState: texture_storage_2d<FORMAT, read>;
+@group(GROUP_INDEX) @binding(WRITE_BINDING) var outputState: texture_storage_2d<FORMAT, write>;
 
-fn instance_index(position: vec2<i32>) -> i32 {
-    return position.y * i32(grid.x) + position.x;
-}
-
-fn state(position: vec2<i32>) -> u32 {
-    return inputState[instance_index(position)];
+fn state(position: vec2<i32>) -> vec4<f32> {
+    return textureLoad(inputState, position);
 }
 
 @compute @workgroup_size(WORKGROUP_SIZE, WORKGROUP_SIZE)
 fn main(input: Input) {
 
     let position = vec2<i32>(input.position.xy);
-    let boundary = vec2<i32>(grid);
-    var neighbors = 0u;
+    let boundary = vec2<i32>(textureDimensions(inputState));
+    var neighbors = vec4<u32>(0, 0, 0, 0);
 
     var dI = vec2<i32>(0, 0);
     for (var i: i32 = -1; i < 2; i = i + 1) {
@@ -34,21 +29,24 @@ fn main(input: Input) {
             }
 
             // periodic boundary conditions
-            neighbors += state((position + dI) % boundary);
+            neighbors += vec4<u32>(state((position + dI) % boundary));
         }
     }
 
     // Conway's game of life rules
-    let i = instance_index(position);
-    switch neighbors {
-        case 2: {
-            outputState[i] = inputState[i];
-        }
-        case 3: {
-            outputState[i] = 1u;
-        }
-        default: {
-            outputState[i] = 0u;
+    var next_state = vec4<f32>(0, 0, 0, 0);
+    for (var k: i32 = 0; k < 4; k = k + 1) {
+        switch neighbors[k] {
+            case 2: {
+                next_state[k] = state(position)[k];
+            }
+            case 3: {
+                next_state[k] = 1;
+            }
+            default: {
+                next_state[k] = 0;
+            }
         }
     }
+    textureStore(outputState, position, next_state);
 }

@@ -409,7 +409,82 @@ function configureCanvas(
 		alphaMode: "opaque",
 	});
 
-	return { context, format };
+	return { context: context, format: format };
+}
+
+function setupVertexBuffer(
+	device: GPUDevice,
+	label: string,
+	data: number[]
+): {
+	vertexBuffer: GPUBuffer;
+	vertexCount: number;
+	arrayStride: number;
+	format: GPUVertexFormat;
+} {
+	const array = new Float32Array(data);
+	const vertexBuffer = device.createBuffer({
+		label: label,
+		size: array.byteLength,
+		usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+	});
+
+	device.queue.writeBuffer(
+		vertexBuffer,
+		/*bufferOffset=*/ 0,
+		/*data=*/ array
+	);
+	return {
+		vertexBuffer: vertexBuffer,
+		vertexCount: array.length / 2,
+		arrayStride: 2 * array.BYTES_PER_ELEMENT,
+		format: "float32x2",
+	};
+}
+
+function setupTextures(
+	device: GPUDevice,
+	size: { width: number; height: number },
+	format: GPUTextureFormat = "rgba32float"
+): {
+	textures: GPUTexture[];
+	format: GPUTextureFormat;
+} {
+	const textureData = new Array(size.width * size.height);
+	for (let i = 0; i < size.width * size.height; i++) {
+		textureData[i] = [
+			Math.random() > 0.5 ? 1 : 0,
+			Math.random() > 0.5 ? 1 : 0,
+			Math.random() > 0.5 ? 1 : 0,
+			Math.random() > 0.5 ? 1 : 0,
+		];
+	}
+
+	const stateTextures = ["A", "B"].map((label) =>
+		device.createTexture({
+			label: `State Texture ${label}`,
+			size: [size.width, size.height],
+			format: format,
+			usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_DST,
+		})
+	);
+	const texture = stateTextures[0];
+	const array = new Float32Array(textureData.flat());
+	device.queue.writeTexture(
+		{ texture },
+		/*data=*/ array,
+		/*dataLayout=*/ {
+			offset: 0,
+			bytesPerRow: 16 * size.width,
+			rowsPerImage: size.height,
+		},
+		/*size=*/ size
+	);
+
+	return {
+		textures: stateTextures,
+		format: format,
+	};
 }
 
 function setValues(code: string, variables: Record<string, any>): string {
@@ -417,4 +492,10 @@ function setValues(code: string, variables: Record<string, any>): string {
 	return code.replace(reg, (k) => variables[k].toString());
 }
 
-export { requestDevice, configureCanvas, setValues };
+export {
+	requestDevice,
+	configureCanvas,
+	setupVertexBuffer,
+	setupTextures,
+	setValues,
+};
