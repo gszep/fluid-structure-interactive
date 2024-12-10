@@ -451,13 +451,14 @@ function setupTextures(
 	format: GPUTextureFormat;
 } {
 	const textureData = new Array(size.width * size.height);
+	const CHANNELS = channelCount(format);
+
 	for (let i = 0; i < size.width * size.height; i++) {
-		textureData[i] = [
-			Math.random() > 0.5 ? 1 : 0,
-			Math.random() > 0.5 ? 1 : 0,
-			Math.random() > 0.5 ? 1 : 0,
-			Math.random() > 0.5 ? 1 : 0,
-		];
+		textureData[i] = [];
+
+		for (let j = 0; j < CHANNELS; j++) {
+			textureData[i].push(Math.random() > 0.5 ? 1 : 0);
+		}
 	}
 
 	const stateTextures = ["A", "B"].map((label) =>
@@ -468,14 +469,16 @@ function setupTextures(
 			usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_DST,
 		})
 	);
+
 	const texture = stateTextures[0];
 	const array = new Float32Array(textureData.flat());
+
 	device.queue.writeTexture(
 		{ texture },
 		/*data=*/ array,
 		/*dataLayout=*/ {
 			offset: 0,
-			bytesPerRow: 16 * size.width,
+			bytesPerRow: size.width * array.BYTES_PER_ELEMENT * CHANNELS,
 			rowsPerImage: size.height,
 		},
 		/*size=*/ size
@@ -485,6 +488,20 @@ function setupTextures(
 		textures: stateTextures,
 		format: format,
 	};
+}
+
+function channelCount(format: GPUTextureFormat): number {
+	if (format.includes("rgba")) {
+		return 4;
+	} else if (format.includes("rgb")) {
+		return 3;
+	} else if (format.includes("rg")) {
+		return 2;
+	} else if (format.includes("r")) {
+		return 1;
+	} else {
+		throw new Error("Invalid format: " + format);
+	}
 }
 
 function setValues(code: string, variables: Record<string, any>): string {
