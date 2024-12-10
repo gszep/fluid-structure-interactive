@@ -14,7 +14,7 @@ fn main(input: Input) {
 
     let position = vec2<i32>(input.position.xy);
     let boundary = vec2<i32>(textureDimensions(inputState));
-    var neighbors = vec3<u32>(0, 0, 0);
+    var neighbors = vec4<u32>(0, 0, 0, 0);
 
     var dI = vec2<i32>(0, 0);
     for (var i: i32 = -1; i < 2; i = i + 1) {
@@ -29,13 +29,13 @@ fn main(input: Input) {
             }
 
             // periodic boundary conditions
-            neighbors += vec3<u32>(state((position + dI) % boundary).rgb);
+            neighbors += vec4<u32>(state((position + dI) % boundary));
         }
     }
 
     // Conway's game of life rules
-    var next_state = vec4<f32>(0, 0, 0, 1);
-    for (var k: i32 = 0; k < 3; k = k + 1) {
+    var next_state = vec4<f32>(0, 0, 0, 0);
+    for (var k: i32 = 0; k < 4; k = k + 1) {
         switch neighbors[k] {
             case 2: {
                 next_state[k] = state(position)[k];

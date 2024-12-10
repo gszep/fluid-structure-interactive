@@ -115,7 +115,7 @@ async function index(): Promise<void> {
 			Math.random() > 0.5 ? 1 : 0,
 			Math.random() > 0.5 ? 1 : 0,
 			Math.random() > 0.5 ? 1 : 0,
-			1,
+			Math.random() > 0.5 ? 1 : 0,
 		];
 	}
 
@@ -177,8 +177,7 @@ async function index(): Promise<void> {
 			colorAttachments: [
 				{
 					view: context.getCurrentTexture().createView(),
-					loadOp: "clear",
-					clearValue: [1, 1, 1, 1],
+					loadOp: "load",
 					storeOp: "store",
 				},
 			],
