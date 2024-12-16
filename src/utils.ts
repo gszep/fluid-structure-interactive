@@ -503,14 +503,62 @@ function setupInteractions(
 	type: GPUBufferBindingType;
 } {
 	let data = new Int32Array(4);
-	data.set([size.width, size.height], 2);
+	let position = { x: 0, y: 0 };
+	let velocity = { x: 0, y: 0 };
 
+	data.set([texture.width, texture.height, position.x, position.y]);
 	if (canvas instanceof HTMLCanvasElement) {
-		canvas.addEventListener("mousemove", (event) => {
-			data.set([
-				Math.floor((event.offsetX / canvas.width) * texture.width),
-				Math.floor((event.offsetY / canvas.height) * texture.height),
-			]);
+		// move events
+		["mousemove", "touchmove"].forEach((type) => {
+			canvas.addEventListener(type, (event) => {
+				switch (true) {
+					case event instanceof MouseEvent:
+						position.x = event.offsetX;
+						position.y = event.offsetY;
+						break;
+
+					case event instanceof TouchEvent:
+						position.x = event.touches[0].clientX;
+						position.y = event.touches[0].clientY;
+						break;
+				}
+
+				let x = Math.floor((position.x / canvas.width) * texture.width);
+				let y = Math.floor(
+					(position.y / canvas.height) * texture.height
+				);
+
+				data.set([x, y]);
+			});
+		});
+
+		// zoom events TODO(@gszep) add pinch and scroll for touch devices
+		["wheel"].forEach((type) => {
+			canvas.addEventListener(type, (event) => {
+				switch (true) {
+					case event instanceof WheelEvent:
+						velocity.x = event.deltaY / 10;
+						velocity.y = event.deltaY / 10;
+						break;
+				}
+
+				size.width += velocity.x;
+				size.height += velocity.y;
+
+				data.set([size.width, size.height], 2);
+			});
+		});
+
+		// click events
+		["mousedown", "touchstart"].forEach((type) => {
+			canvas.addEventListener(type, (event) => {
+				data.set([size.width, size.height], 2);
+			});
+		});
+		["mouseup", "touchend"].forEach((type) => {
+			canvas.addEventListener(type, (event) => {
+				data.set([0, 0], 2);
+			});
 		});
 	}
 	const uniformBuffer = device.createBuffer({
