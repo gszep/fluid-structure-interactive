@@ -2,8 +2,14 @@ struct Input {
   @builtin(global_invocation_id) position: vec3<u32>,
 };
 
+struct Interaction {
+    position: vec2<i32>,
+    size: vec2<i32>,
+};
+
 @group(GROUP_INDEX) @binding(READ_BINDING) var inputState: texture_storage_2d<FORMAT, read>;
 @group(GROUP_INDEX) @binding(WRITE_BINDING) var outputState: texture_storage_2d<FORMAT, write>;
+@group(GROUP_INDEX) @binding(INTERACTION_BINDING) var<uniform> interaction: Interaction;
 
 fn state(position: vec2<i32>) -> vec4<f32> {
     return textureLoad(inputState, position);
@@ -31,6 +37,12 @@ fn main(input: Input) {
             // periodic boundary conditions
             neighbors += vec4<u32>(state((position + dI) % boundary));
         }
+    }
+
+    // brush interaction
+    let distance = abs(position - interaction.position);
+    if all(distance < interaction.size) {
+        neighbors += vec4<u32>(1, 1, 1, 1);
     }
 
     // Conway's game of life rules

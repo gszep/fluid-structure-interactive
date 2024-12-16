@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Fluid Structure Interactive</title>
+		<style>
+			body {
+				margin: 0;
+				padding: 0;
+				overflow: hidden;
+			}
+
+			.webgpu-not-supported {
+				visibility: hidden;
+				padding: 1em;
+				margin: auto;
+				border: 4px solid black;
+				border-radius: 4px;
+				background-color: #ffdaba;
+				font-family: monospace;
+				font-size: large;
+				text-align: center;
+				position: absolute;
+				top: 50%;
+				right: 50%;
+				-ms-transform: translateY(-50%);
+				transform: translateY(-50%);
+				-ms-transform: translateX(50%);
+				transform: translateX(50%);
+			}
+		</style>
+	<script defer src="runtime.bundle.js"></script><script defer src="index.bundle.js"></script></head>
+
+	<body>
+		<div class="webgpu-not-supported">
+			<span>WebGPU not enabled on this browser</span>
+			<a
+				href="https://developer.chrome.com/en/docs/web-platform/webgpu/#use"
+			>
+				Click here for updates!
+			</a>
+		</div>
+	</body>
+</html>

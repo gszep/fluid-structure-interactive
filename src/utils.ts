@@ -449,15 +449,17 @@ function setupTextures(
 ): {
 	textures: GPUTexture[];
 	format: GPUTextureFormat;
+	size: { width: number; height: number };
 } {
 	const textureData = new Array(size.width * size.height);
+	const CHANNELS = channelCount(format);
+
 	for (let i = 0; i < size.width * size.height; i++) {
-		textureData[i] = [
-			Math.random() > 0.5 ? 1 : 0,
-			Math.random() > 0.5 ? 1 : 0,
-			Math.random() > 0.5 ? 1 : 0,
-			Math.random() > 0.5 ? 1 : 0,
-		];
+		textureData[i] = [];
+
+		for (let j = 0; j < CHANNELS; j++) {
+			textureData[i].push(Math.random() > 0.5 ? 1 : 0);
+		}
 	}
 
 	const stateTextures = ["A", "B"].map((label) =>
@@ -468,14 +470,16 @@ function setupTextures(
 			usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_DST,
 		})
 	);
+
 	const texture = stateTextures[0];
 	const array = new Float32Array(textureData.flat());
+
 	device.queue.writeTexture(
 		{ texture },
 		/*data=*/ array,
 		/*dataLayout=*/ {
 			offset: 0,
-			bytesPerRow: 16 * size.width,
+			bytesPerRow: size.width * array.BYTES_PER_ELEMENT * CHANNELS,
 			rowsPerImage: size.height,
 		},
 		/*size=*/ size
@@ -484,7 +488,104 @@ function setupTextures(
 	return {
 		textures: stateTextures,
 		format: format,
+		size: size,
 	};
+}
+
+function setupInteractions(
+	device: GPUDevice,
+	canvas: HTMLCanvasElement | OffscreenCanvas,
+	texture: { width: number; height: number },
+	size: { width: number; height: number } = { width: 20, height: 20 }
+): {
+	buffer: GPUBuffer;
+	data: BufferSource | SharedArrayBuffer;
+	type: GPUBufferBindingType;
+} {
+	let data = new Int32Array(4);
+	let position = { x: 0, y: 0 };
+	let velocity = { x: 0, y: 0 };
+
+	data.set([texture.width, texture.height, position.x, position.y]);
+	if (canvas instanceof HTMLCanvasElement) {
+		// move events
+		["mousemove", "touchmove"].forEach((type) => {
+			canvas.addEventListener(type, (event) => {
+				switch (true) {
+					case event instanceof MouseEvent:
+						position.x = event.offsetX;
+						position.y = event.offsetY;
+						break;
+
+					case event instanceof TouchEvent:
+						position.x = event.touches[0].clientX;
+						position.y = event.touches[0].clientY;
+						break;
+				}
+
+				let x = Math.floor((position.x / canvas.width) * texture.width);
+				let y = Math.floor(
+					(position.y / canvas.height) * texture.height
+				);
+
+				data.set([x, y]);
+			});
+		});
+
+		// zoom events TODO(@gszep) add pinch and scroll for touch devices
+		["wheel"].forEach((type) => {
+			canvas.addEventListener(type, (event) => {
+				switch (true) {
+					case event instanceof WheelEvent:
+						velocity.x = event.deltaY / 10;
+						velocity.y = event.deltaY / 10;
+						break;
+				}
+
+				size.width += velocity.x;
+				size.height += velocity.y;
+
+				data.set([size.width, size.height], 2);
+			});
+		});
+
+		// click events
+		["mousedown", "touchstart"].forEach((type) => {
+			canvas.addEventListener(type, (event) => {
+				data.set([size.width, size.height], 2);
+			});
+		});
+		["mouseup", "touchend"].forEach((type) => {
+			canvas.addEventListener(type, (event) => {
+				data.set([0, 0], 2);
+			});
+		});
+	}
+	const uniformBuffer = device.createBuffer({
+		label: "Interaction Buffer",
+		size: data.byteLength,
+		usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+	});
+
+	return {
+		buffer: uniformBuffer,
+		data: data,
+		type: "uniform",
+	};
+}
+
+function channelCount(format: GPUTextureFormat): number {
+	if (format.includes("rgba")) {
+		return 4;
+	} else if (format.includes("rgb")) {
+		return 3;
+	} else if (format.includes("rg")) {
+		return 2;
+	} else if (format.includes("r")) {
+		return 1;
+	} else {
+		throw new Error("Invalid format: " + format);
+	}
 }
 
 function setValues(code: string, variables: Record<string, any>): string {
@@ -497,5 +598,6 @@ export {
 	configureCanvas,
 	setupVertexBuffer,
 	setupTextures,
+	setupInteractions,
 	setValues,
 };
