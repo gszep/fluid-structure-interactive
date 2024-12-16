@@ -3,6 +3,7 @@ import {
 	configureCanvas,
 	setupVertexBuffer,
 	setupTextures,
+	setupInteractions,
 	setValues,
 } from "./utils";
 
@@ -45,6 +46,13 @@ async function index(): Promise<void> {
 	const READ_BINDING = 0;
 	const WRITE_BINDING = 1;
 
+	const interactions = setupInteractions(
+		device,
+		context.canvas,
+		textures.size
+	);
+	const INTERACTION_BINDING = 2;
+
 	const bindGroupLayout = device.createBindGroupLayout({
 		label: "bindGroupLayout",
 		entries: [
@@ -64,6 +72,13 @@ async function index(): Promise<void> {
 					format: textures.format,
 				},
 			},
+			{
+				binding: INTERACTION_BINDING,
+				visibility: GPUShaderStage.COMPUTE,
+				buffer: {
+					type: interactions.type,
+				},
+			},
 		],
 	});
 
@@ -79,6 +94,12 @@ async function index(): Promise<void> {
 				{
 					binding: WRITE_BINDING,
 					resource: textures.textures[(i + 1) % 2].createView(),
+				},
+				{
+					binding: INTERACTION_BINDING,
+					resource: {
+						buffer: interactions.buffer,
+					},
 				},
 			],
 		})
@@ -101,6 +122,7 @@ async function index(): Promise<void> {
 					GROUP_INDEX: GROUP_INDEX,
 					READ_BINDING: READ_BINDING,
 					WRITE_BINDING: WRITE_BINDING,
+					INTERACTION_BINDING: INTERACTION_BINDING,
 					FORMAT: textures.format,
 				}),
 			}),
@@ -169,6 +191,13 @@ async function index(): Promise<void> {
 
 		computePass.setPipeline(computePipeline);
 		computePass.setBindGroup(GROUP_INDEX, bindGroups[frame_index % 2]);
+
+		device.queue.writeBuffer(
+			interactions.buffer,
+			/*offset=*/ 0,
+			/*data=*/ interactions.data
+		);
+
 		computePass.dispatchWorkgroups(WORKGROUP_COUNT, WORKGROUP_COUNT);
 		computePass.end();
 

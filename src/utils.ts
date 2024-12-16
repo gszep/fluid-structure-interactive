@@ -449,6 +449,7 @@ function setupTextures(
 ): {
 	textures: GPUTexture[];
 	format: GPUTextureFormat;
+	size: { width: number; height: number };
 } {
 	const textureData = new Array(size.width * size.height);
 	const CHANNELS = channelCount(format);
@@ -487,6 +488,41 @@ function setupTextures(
 	return {
 		textures: stateTextures,
 		format: format,
+		size: size,
+	};
+}
+
+function setupInteractions(
+	device: GPUDevice,
+	canvas: HTMLCanvasElement | OffscreenCanvas,
+	texture: { width: number; height: number },
+	size: { width: number; height: number } = { width: 20, height: 20 }
+): {
+	buffer: GPUBuffer;
+	data: BufferSource | SharedArrayBuffer;
+	type: GPUBufferBindingType;
+} {
+	let data = new Int32Array(4);
+	data.set([size.width, size.height], 2);
+
+	if (canvas instanceof HTMLCanvasElement) {
+		canvas.addEventListener("mousemove", (event) => {
+			data.set([
+				Math.floor((event.offsetX / canvas.width) * texture.width),
+				Math.floor((event.offsetY / canvas.height) * texture.height),
+			]);
+		});
+	}
+	const uniformBuffer = device.createBuffer({
+		label: "Interaction Buffer",
+		size: data.byteLength,
+		usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+	});
+
+	return {
+		buffer: uniformBuffer,
+		data: data,
+		type: "uniform",
 	};
 }
 
@@ -514,5 +550,6 @@ export {
 	configureCanvas,
 	setupVertexBuffer,
 	setupTextures,
+	setupInteractions,
 	setValues,
 };
