@@ -11,47 +11,37 @@ import cellVertexShader from "./shaders/cell.vert.wgsl";
 import cellFragmentShader from "./shaders/cell.frag.wgsl";
 import timestepComputeShader from "./shaders/timestep.comp.wgsl";
 
-const GRID_SIZE = 512;
 const WORKGROUP_SIZE = 8;
-const WORKGROUP_COUNT = Math.ceil(GRID_SIZE / WORKGROUP_SIZE);
-
 const UPDATE_INTERVAL = 1;
 let frame_index = 0;
 
 async function index(): Promise<void> {
 	// setup and configure WebGPU
-	const device = await requestDevice({
-		powerPreference: "high-performance",
-	});
-
-	const { context, format } = configureCanvas(device, {
-		width: 512,
-		height: 512,
-	});
-
-	const quad = setupVertexBuffer(
-		device,
-		"Quad Vertex Buffer",
-		[0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1]
-	);
-
-	const textures = setupTextures(device, {
-		width: GRID_SIZE,
-		height: GRID_SIZE,
-	});
-
-	const VERTEX_INDEX = 0;
+	const device = await requestDevice();
+	const canvas = configureCanvas(device);
 	const GROUP_INDEX = 0;
+
+	// initialize vertex buffer and textures
+	const VERTEX_INDEX = 0;
+	const QUAD = [0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1];
+
+	const quad = setupVertexBuffer(device, "Quad Vertex Buffer", QUAD);
+	const textures = setupTextures(device, canvas.size);
 
 	const READ_BINDING = 0;
 	const WRITE_BINDING = 1;
+	const WORKGROUP_COUNT: [number, number] = [
+		Math.ceil(textures.size.width / WORKGROUP_SIZE),
+		Math.ceil(textures.size.height / WORKGROUP_SIZE),
+	];
 
+	// setup interactions
+	const INTERACTION_BINDING = 2;
 	const interactions = setupInteractions(
 		device,
-		context.canvas,
+		canvas.context.canvas,
 		textures.size
 	);
-	const INTERACTION_BINDING = 2;
 
 	const bindGroupLayout = device.createBindGroupLayout({
 		label: "bindGroupLayout",
@@ -166,7 +156,7 @@ async function index(): Promise<void> {
 			}),
 			targets: [
 				{
-					format: format,
+					format: canvas.format,
 				},
 			],
 		},
@@ -174,7 +164,7 @@ async function index(): Promise<void> {
 
 	const colorAttachments: GPURenderPassColorAttachment[] = [
 		{
-			view: context.getCurrentTexture().createView(),
+			view: canvas.context.getCurrentTexture().createView(),
 			loadOp: "load",
 			storeOp: "store",
 		},
@@ -198,13 +188,13 @@ async function index(): Promise<void> {
 			/*data=*/ interactions.data
 		);
 
-		computePass.dispatchWorkgroups(WORKGROUP_COUNT, WORKGROUP_COUNT);
+		computePass.dispatchWorkgroups(...WORKGROUP_COUNT);
 		computePass.end();
 
 		frame_index++;
 
 		// render pass
-		const view = context.getCurrentTexture().createView();
+		const view = canvas.context.getCurrentTexture().createView();
 		renderPassDescriptor.colorAttachments[RENDER_INDEX].view = view;
 		const renderPass = command.beginRenderPass(renderPassDescriptor);
 

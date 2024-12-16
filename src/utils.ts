@@ -381,7 +381,7 @@ function throwDetectionError(error: string): never {
 }
 
 async function requestDevice(
-	options: GPURequestAdapterOptions = {}
+	options: GPURequestAdapterOptions = { powerPreference: "high-performance" }
 ): Promise<GPUDevice> {
 	if (!navigator.gpu) throwDetectionError("WebGPU NOT Supported");
 
@@ -393,9 +393,13 @@ async function requestDevice(
 
 function configureCanvas(
 	device: GPUDevice,
-	attributes = { width: 512, height: 512 }
-): { context: GPUCanvasContext; format: GPUTextureFormat } {
-	const canvas = Object.assign(document.createElement("canvas"), attributes);
+	size = { width: window.innerWidth, height: window.innerHeight }
+): {
+	context: GPUCanvasContext;
+	format: GPUTextureFormat;
+	size: { width: number; height: number };
+} {
+	const canvas = Object.assign(document.createElement("canvas"), size);
 	document.body.appendChild(canvas);
 
 	const context = document.querySelector("canvas")!.getContext("webgpu");
@@ -409,7 +413,7 @@ function configureCanvas(
 		alphaMode: "opaque",
 	});
 
-	return { context: context, format: format };
+	return { context: context, format: format, size: size };
 }
 
 function setupVertexBuffer(
