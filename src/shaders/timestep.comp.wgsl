@@ -7,12 +7,13 @@ struct Interaction {
     size: vec2<i32>,
 };
 
-@group(GROUP_INDEX) @binding(READ_BINDING) var inputState: texture_storage_2d<FORMAT, read>;
-@group(GROUP_INDEX) @binding(WRITE_BINDING) var outputState: texture_storage_2d<FORMAT, write>;
+@group(GROUP_INDEX) @binding(READ_BINDING) var inputState: texture_2d<TEXTURE_FORMAT>;
+@group(GROUP_INDEX) @binding(WRITE_BINDING) var outputState: texture_storage_2d<STORAGE_FORMAT, write>;
 @group(GROUP_INDEX) @binding(INTERACTION_BINDING) var<uniform> interaction: Interaction;
 
 fn state(position: vec2<i32>) -> vec4<f32> {
-    return textureLoad(inputState, position);
+    const level: i32 = 0;
+    return textureLoad(inputState, position, level);
 }
 
 @compute @workgroup_size(WORKGROUP_SIZE, WORKGROUP_SIZE)

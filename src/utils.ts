@@ -381,14 +381,15 @@ function throwDetectionError(error: string): never {
 }
 
 async function requestDevice(
-	options: GPURequestAdapterOptions = { powerPreference: "high-performance" }
+	options: GPURequestAdapterOptions = { powerPreference: "high-performance" },
+	requiredFeatures: GPUFeatureName[] = ["float32-filterable"]
 ): Promise<GPUDevice> {
 	if (!navigator.gpu) throwDetectionError("WebGPU NOT Supported");
 
 	const adapter = await navigator.gpu.requestAdapter(options);
 	if (!adapter) throwDetectionError("No GPU adapter found");
 
-	return adapter.requestDevice();
+	return adapter.requestDevice({ requiredFeatures: requiredFeatures });
 }
 
 function configureCanvas(
@@ -449,14 +450,26 @@ function setupVertexBuffer(
 function setupTextures(
 	device: GPUDevice,
 	size: { width: number; height: number },
-	format: GPUTextureFormat = "rgba32float"
+	format: {
+		sampleType: GPUTextureSampleType;
+		storage: GPUTextureFormat;
+		texture: string;
+	} = {
+		sampleType: "float",
+		storage: "rgba32float",
+		texture: "f32",
+	}
 ): {
 	textures: GPUTexture[];
-	format: GPUTextureFormat;
+	format: {
+		sampleType: GPUTextureSampleType;
+		storage: GPUTextureFormat;
+		texture: string;
+	};
 	size: { width: number; height: number };
 } {
 	const textureData = new Array(size.width * size.height);
-	const CHANNELS = channelCount(format);
+	const CHANNELS = channelCount(format.storage);
 
 	for (let i = 0; i < size.width * size.height; i++) {
 		textureData[i] = [];
@@ -470,8 +483,11 @@ function setupTextures(
 		device.createTexture({
 			label: `State Texture ${label}`,
 			size: [size.width, size.height],
-			format: format,
-			usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_DST,
+			format: format.storage,
+			usage:
+				GPUTextureUsage.TEXTURE_BINDING |
+				GPUTextureUsage.STORAGE_BINDING |
+				GPUTextureUsage.COPY_DST,
 		})
 	);
 
