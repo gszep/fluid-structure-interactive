@@ -13,6 +13,8 @@ struct Output {
 fn main(input: Input) -> Output {
     var output: Output;
 
-    output.color = textureSample(F, Sampler, (1 + input.coordinate) / 2);
+    let F = textureSample(F, Sampler, (1 + input.coordinate) / 2);
+    // output.color.r = F.z;
+    output.color.b = F.w;
     return output;
 }
