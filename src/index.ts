@@ -112,7 +112,6 @@ async function index(): Promise<void> {
 					READ_BINDING: READ_BINDING,
 					WRITE_BINDING: WRITE_BINDING,
 					INTERACTION_BINDING: INTERACTION_BINDING,
-					TEXTURE_FORMAT: textures.format.texture,
 					STORAGE_FORMAT: textures.format.storage,
 				}),
 			}),
@@ -146,7 +145,6 @@ async function index(): Promise<void> {
 		fragment: {
 			module: device.createShaderModule({
 				code: setValues(cellFragmentShader, {
-					TEXTURE_FORMAT: textures.format.texture,
 					GROUP_INDEX: GROUP_INDEX,
 					READ_BINDING: READ_BINDING,
 					VERTEX_INDEX: VERTEX_INDEX,

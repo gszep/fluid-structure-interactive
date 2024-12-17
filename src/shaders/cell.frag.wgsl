@@ -6,7 +6,7 @@ struct Output {
   @location(RENDER_INDEX) color: vec4<f32>
 };
 
-@group(GROUP_INDEX) @binding(READ_BINDING) var state: texture_2d<TEXTURE_FORMAT>;
+@group(GROUP_INDEX) @binding(READ_BINDING) var state: texture_2d<f32>;
 
 @fragment
 fn main(input: Input) -> Output {
