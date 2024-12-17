@@ -23,7 +23,7 @@ async function index(): Promise<void> {
 
 	// initialize vertex buffer and textures
 	const VERTEX_INDEX = 0;
-	const QUAD = [0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1];
+	const QUAD = [-1, -1, 1, -1, 1, 1, -1, -1, 1, 1, -1, 1];
 
 	const quad = setupVertexBuffer(device, "Quad Vertex Buffer", QUAD);
 	const textures = setupTextures(device, canvas.size);
@@ -42,6 +42,12 @@ async function index(): Promise<void> {
 		canvas.context.canvas,
 		textures.size
 	);
+
+	const SAMPLER_BINDING = 3;
+	const sampler = device.createSampler({
+		addressModeU: "repeat",
+		addressModeV: "repeat",
+	});
 
 	const bindGroupLayout = device.createBindGroupLayout({
 		label: "bindGroupLayout",
@@ -68,6 +74,11 @@ async function index(): Promise<void> {
 					type: interactions.type,
 				},
 			},
+			{
+				binding: SAMPLER_BINDING,
+				visibility: GPUShaderStage.FRAGMENT,
+				sampler: {},
+			},
 		],
 	});
 
@@ -89,6 +100,10 @@ async function index(): Promise<void> {
 					resource: {
 						buffer: interactions.buffer,
 					},
+				},
+				{
+					binding: SAMPLER_BINDING,
+					resource: sampler,
 				},
 			],
 		})
@@ -113,6 +128,8 @@ async function index(): Promise<void> {
 					WRITE_BINDING: WRITE_BINDING,
 					INTERACTION_BINDING: INTERACTION_BINDING,
 					STORAGE_FORMAT: textures.format.storage,
+					WIDTH: textures.size.width,
+					HEIGHT: textures.size.height,
 				}),
 			}),
 		},
@@ -146,9 +163,12 @@ async function index(): Promise<void> {
 			module: device.createShaderModule({
 				code: setValues(cellFragmentShader, {
 					GROUP_INDEX: GROUP_INDEX,
+					SAMPLER_BINDING: SAMPLER_BINDING,
 					READ_BINDING: READ_BINDING,
 					VERTEX_INDEX: VERTEX_INDEX,
 					RENDER_INDEX: RENDER_INDEX,
+					WIDTH: textures.size.width,
+					HEIGHT: textures.size.height,
 				}),
 				label: "cellFragmentShader",
 			}),

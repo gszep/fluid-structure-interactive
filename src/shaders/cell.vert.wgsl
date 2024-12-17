@@ -12,8 +12,12 @@ struct Output {
 fn main(input: Input) -> Output {
     var output: Output;
 
-    output.position = vec4<f32>(2 * input.position.x - 1, 1 - 2 * input.position.y, 0, 1);
-    output.coordinate = input.position;
+    output.position.x = input.position.x;
+    output.position.y = -input.position.y;
 
+    output.position.z = 0;
+    output.position.w = 1;
+
+    output.coordinate = input.position;
     return output;
 }

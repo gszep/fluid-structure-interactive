@@ -6,15 +6,13 @@ struct Output {
   @location(RENDER_INDEX) color: vec4<f32>
 };
 
-@group(GROUP_INDEX) @binding(READ_BINDING) var state: texture_2d<f32>;
+@group(GROUP_INDEX) @binding(READ_BINDING) var F: texture_2d<f32>;
+@group(GROUP_INDEX) @binding(SAMPLER_BINDING) var Sampler: sampler;
 
 @fragment
 fn main(input: Input) -> Output {
     var output: Output;
-    const level: i32 = 0;
 
-    let uv = vec2<u32>(input.coordinate * vec2<f32>(textureDimensions(state)));
-    output.color = textureLoad(state, uv, level);
-
+    output.color = textureSample(F, Sampler, (1 + input.coordinate) / 2);
     return output;
 }
