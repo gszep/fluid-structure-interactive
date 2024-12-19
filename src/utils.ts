@@ -516,17 +516,17 @@ function setupInteractions(
 	device: GPUDevice,
 	canvas: HTMLCanvasElement | OffscreenCanvas,
 	texture: { width: number; height: number },
-	size: { width: number; height: number } = { width: 20, height: 20 }
+	size: number = 200
 ): {
 	buffer: GPUBuffer;
 	data: BufferSource | SharedArrayBuffer;
 	type: GPUBufferBindingType;
 } {
-	let data = new Int32Array(4);
+	let data = new Float32Array(4);
 	let position = { x: 0, y: 0 };
 	let velocity = { x: 0, y: 0 };
 
-	data.set([texture.width, texture.height, position.x, position.y]);
+	data.set([position.x, position.y]);
 	if (canvas instanceof HTMLCanvasElement) {
 		// move events
 		["mousemove", "touchmove"].forEach((type) => {
@@ -557,27 +557,25 @@ function setupInteractions(
 			canvas.addEventListener(type, (event) => {
 				switch (true) {
 					case event instanceof WheelEvent:
-						velocity.x = event.deltaY / 10;
-						velocity.y = event.deltaY / 10;
+						velocity.x = event.deltaY;
+						velocity.y = event.deltaY;
 						break;
 				}
 
-				size.width += velocity.x;
-				size.height += velocity.y;
-
-				data.set([size.width, size.height], 2);
+				size += velocity.y;
+				data.set([size], 2);
 			});
 		});
 
 		// click events
 		["mousedown", "touchstart"].forEach((type) => {
 			canvas.addEventListener(type, (event) => {
-				data.set([size.width, size.height], 2);
+				data.set([size], 2);
 			});
 		});
 		["mouseup", "touchend"].forEach((type) => {
 			canvas.addEventListener(type, (event) => {
-				data.set([0, 0], 2);
+				data.set([NaN], 2);
 			});
 		});
 	}

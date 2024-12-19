@@ -5,8 +5,8 @@ struct Input {
 };
 
 struct Interaction {
-    position: vec2<i32>,
-    size: vec2<i32>,
+    position: vec2<f32>,
+    size: f32,
 };
 
 @group(GROUP_INDEX) @binding(READ_BINDING) var F: texture_2d<f32>;
@@ -84,16 +84,18 @@ fn main(input: Input) {
     var Fdt = value(F, x);
 
     // brush interaction
-    let distance = abs(x - interaction.position);
-    if all(distance * distance < interaction.size) {
-        Fdt.w += exp(-f32(dot(distance, distance)) / 10);
+    let distance = vec2<f32>(x) - interaction.position;
+    let norm = dot(distance, distance);
+
+    if sqrt(norm) < interaction.size {
+        Fdt.w += exp(- norm / interaction.size);
     }
     
     // relaxation of poisson equation for stream function F.z
     Fdt.z += (laplacian(F, x).z + Fdt.w) * 0.25;
 
     // update vorticity F.w
-    Fdt.w += (laplacian(F, x).w * 0.00 - advection(F, x) * 0.01) ;
+    // Fdt.w += (laplacian(F, x).w * 0.00 - advection(F, x) * 0.01) ;
 
     textureStore(Fdash, x, Fdt);
 }
