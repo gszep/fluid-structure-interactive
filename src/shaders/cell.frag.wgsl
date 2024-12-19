@@ -21,6 +21,6 @@ fn main(input: Input) -> Output {
     output.color.g = max(0, F.z);
     output.color.r = max(0, -F.z);
 
-    output.color.a = 1.0;
+    output.color.a = F.x;
     return output;
 }

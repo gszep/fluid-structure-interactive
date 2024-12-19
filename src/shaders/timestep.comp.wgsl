@@ -24,7 +24,7 @@ fn laplacian(F: texture_2d<f32>, x: vec2<i32>) -> vec4<f32> {
 }
 
 fn jacobi_iteration(F: texture_2d<f32>, x: vec2<i32>, h: f32) -> f32 {
-    return (value(F, x + dx).z + value(F, x - dx).z + value(F, x + dy).z + value(F, x - dy).z - h * value(F, x).w) / 4;
+    return (value(F, x + dx).z + value(F, x - dx).z + value(F, x + dy).z + value(F, x - dy).z + h * value(F, x).w) / 4;
 }
 
 fn advection(F: texture_2d<f32>, x: vec2<i32>) -> f32 {
@@ -62,8 +62,8 @@ fn main(input: Input) {
     // workgroupBarrier();
 
     // update vorticity F.w
-    // Fdt.w += laplacian(F, x).w * 0.2;
+    Fdt.w += laplacian(F, x).w * 0.2;
 
-    Fdt.x = abs(laplacian(F, x).z - value(F, x).w) / (1 + value(F, x).w);
+    Fdt.x = abs(laplacian(F, x).z + value(F, x).w) / (1 + value(F, x).w);
     textureStore(Fdash, x, Fdt);
 }

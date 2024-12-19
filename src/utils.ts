@@ -411,7 +411,7 @@ function configureCanvas(
 		device: device,
 		format: format,
 		usage: GPUTextureUsage.RENDER_ATTACHMENT,
-		alphaMode: "opaque",
+		alphaMode: "premultiplied",
 	});
 
 	return { context: context, format: format, size: size };
