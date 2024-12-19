@@ -581,6 +581,9 @@ function setupInteractions(
 					case event instanceof MouseEvent:
 						sign = 1 - event.button;
 						break;
+
+					case event instanceof TouchEvent:
+						sign = event.touches.length > 1 ? -1 : 1;
 				}
 				data.set([sign * size], 2);
 			});
