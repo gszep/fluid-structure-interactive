@@ -523,11 +523,18 @@ function setupInteractions(
 	type: GPUBufferBindingType;
 } {
 	let data = new Float32Array(4);
+	var sign = 1;
+
 	let position = { x: 0, y: 0 };
 	let velocity = { x: 0, y: 0 };
 
 	data.set([position.x, position.y]);
 	if (canvas instanceof HTMLCanvasElement) {
+		// disable context menu
+		canvas.addEventListener("contextmenu", (event) => {
+			event.preventDefault();
+		});
+
 		// move events
 		["mousemove", "touchmove"].forEach((type) => {
 			canvas.addEventListener(type, (event) => {
@@ -567,10 +574,15 @@ function setupInteractions(
 			});
 		});
 
-		// click events
+		// click events TODO(@gszep) implement right click equivalent for touch devices
 		["mousedown", "touchstart"].forEach((type) => {
 			canvas.addEventListener(type, (event) => {
-				data.set([size], 2);
+				switch (true) {
+					case event instanceof MouseEvent:
+						sign = 1 - event.button;
+						break;
+				}
+				data.set([sign * size], 2);
 			});
 		});
 		["mouseup", "touchend"].forEach((type) => {

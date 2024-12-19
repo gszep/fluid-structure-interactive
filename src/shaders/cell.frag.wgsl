@@ -12,9 +12,15 @@ struct Output {
 @fragment
 fn main(input: Input) -> Output {
     var output: Output;
-
     let F = textureSample(F, Sampler, (1 + input.coordinate) / 2);
-    // output.color.r = F.z;
-    output.color.b = F.w;
+
+    // vorticity map
+    output.color.b = abs(F.w);
+
+    // stream function map
+    output.color.g = max(0, F.z);
+    output.color.r = max(0, -F.z);
+
+    output.color.a = 1.0;
     return output;
 }
