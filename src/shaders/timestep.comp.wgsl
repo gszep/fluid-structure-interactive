@@ -19,20 +19,20 @@ const dy = vec2<i32>(0, 1);
 @group(GROUP_INDEX) @binding(WRITE_BINDING) var Fdash: texture_storage_2d<STORAGE_FORMAT, write>;
 @group(GROUP_INDEX) @binding(INTERACTION_BINDING) var<uniform> interaction: Interaction;
 
-fn laplacian(F: texture_2d<f32>, x: vec2<i32>) -> vec4<f32> {
+fn diffusion(F: texture_2d<f32>, x: vec2<i32>) -> vec4<f32> {
     return value(F, x + dx) + value(F, x - dx) + value(F, x + dy) + value(F, x - dy) - 4 * value(F, x);
 }
 
-fn jacobi_iteration(F: texture_2d<f32>, x: vec2<i32>, h: f32) -> f32 {
-    return (value(F, x + dx).z + value(F, x - dx).z + value(F, x + dy).z + value(F, x - dy).z + h * value(F, x).w) / 4;
+fn jacobi_iteration(F: texture_2d<f32>, w: f32, x: vec2<i32>, h: f32) -> f32 {
+    return (value(F, x + dx).z + value(F, x - dx).z + value(F, x + dy).z + value(F, x - dy).z + h * w) / 4;
 }
 
 fn advection(F: texture_2d<f32>, x: vec2<i32>) -> f32 {
-    let vx = value(F, x + dy).z - value(F, x - dy).z;
-    let vy = value(F, x - dx).z - value(F, x + dx).z;
+    let vx = (value(F, x + dy).z - value(F, x - dy).z) / 2;
+    let vy = (value(F, x - dx).z - value(F, x + dx).z) / 2;
 
-    let wx = value(F, x + dx).w - value(F, x - dx).w;
-    let wy = value(F, x + dy).w - value(F, x - dy).w;
+    let wx = (value(F, x + dx).w - value(F, x - dx).w) / 2;
+    let wy = (value(F, x + dy).w - value(F, x - dy).w) / 2;
 
     return vx * wx + vy * wy;
 }
@@ -48,6 +48,7 @@ fn main(input: Input) {
 
     let x = vec2<i32>(input.globalInvocationID.xy);
     var Fdt = value(F, x);
+    const dt: f32 = 0.02;
 
     // brush interaction
     let distance = vec2<f32>(x) - interaction.position;
@@ -56,14 +57,16 @@ fn main(input: Input) {
     if sqrt(norm) < abs(interaction.size) {
         Fdt.w += 0.01 * sign(interaction.size) * exp(- norm / abs(interaction.size));
     }
+
+    // update vorticity
+    Fdt.w -= 2 * advection(F, x) * dt;
+    Fdt.w += diffusion(F, x).w * dt;
     
-    // relaxation of poisson equation for stream function F.z
-    Fdt.z = jacobi_iteration(F, x, 1);
-    // workgroupBarrier();
+    // relaxation of poisson equation for stream function
+    Fdt.z = jacobi_iteration(F, Fdt.w, x, 1);
 
-    // update vorticity F.w
-    Fdt.w += laplacian(F, x).w * 0.2;
+    // error calculation
+    Fdt.x = abs(diffusion(F, x).z + value(F, x).w) / (1 + value(F, x).w);
 
-    Fdt.x = abs(laplacian(F, x).z + value(F, x).w) / (1 + value(F, x).w);
     textureStore(Fdash, x, Fdt);
 }

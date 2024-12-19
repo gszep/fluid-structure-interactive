@@ -15,12 +15,12 @@ fn main(input: Input) -> Output {
     let F = textureSample(F, Sampler, (1 + input.coordinate) / 2);
 
     // vorticity map
-    output.color.b = abs(F.w);
+    output.color.g = 5 * max(0, F.w);
+    output.color.r = 5 * max(0, -F.w);
 
     // stream function map
-    output.color.g = max(0, F.z);
-    output.color.r = max(0, -F.z);
+    // output.color.b = abs(F.z);
 
-    output.color.a = F.x;
+    output.color.a = 1;//F.x;
     return output;
 }
