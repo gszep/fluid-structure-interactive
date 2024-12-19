@@ -48,7 +48,7 @@ fn main(input: Input) {
 
     let x = vec2<i32>(input.globalInvocationID.xy);
     var Fdt = value(F, x);
-    const dt: f32 = 0.02;
+    const dt: f32 = 0.2;
 
     // brush interaction
     let distance = vec2<f32>(x) - interaction.position;
