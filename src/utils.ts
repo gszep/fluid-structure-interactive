@@ -381,14 +381,15 @@ function throwDetectionError(error: string): never {
 }
 
 async function requestDevice(
-	options: GPURequestAdapterOptions = { powerPreference: "high-performance" }
+	options: GPURequestAdapterOptions = { powerPreference: "high-performance" },
+	requiredFeatures: GPUFeatureName[] = ["float32-filterable"]
 ): Promise<GPUDevice> {
 	if (!navigator.gpu) throwDetectionError("WebGPU NOT Supported");
 
 	const adapter = await navigator.gpu.requestAdapter(options);
 	if (!adapter) throwDetectionError("No GPU adapter found");
 
-	return adapter.requestDevice();
+	return adapter.requestDevice({ requiredFeatures: requiredFeatures });
 }
 
 function configureCanvas(
@@ -410,7 +411,7 @@ function configureCanvas(
 		device: device,
 		format: format,
 		usage: GPUTextureUsage.RENDER_ATTACHMENT,
-		alphaMode: "opaque",
+		alphaMode: "premultiplied",
 	});
 
 	return { context: context, format: format, size: size };
@@ -449,20 +450,32 @@ function setupVertexBuffer(
 function setupTextures(
 	device: GPUDevice,
 	size: { width: number; height: number },
-	format: GPUTextureFormat = "rgba32float"
+	format: {
+		sampleType: GPUTextureSampleType;
+		storage: GPUTextureFormat;
+		texture: string;
+	} = {
+		sampleType: "float",
+		storage: "rgba32float",
+		texture: "f32",
+	}
 ): {
 	textures: GPUTexture[];
-	format: GPUTextureFormat;
+	format: {
+		sampleType: GPUTextureSampleType;
+		storage: GPUTextureFormat;
+		texture: string;
+	};
 	size: { width: number; height: number };
 } {
 	const textureData = new Array(size.width * size.height);
-	const CHANNELS = channelCount(format);
+	const CHANNELS = channelCount(format.storage);
 
 	for (let i = 0; i < size.width * size.height; i++) {
 		textureData[i] = [];
 
 		for (let j = 0; j < CHANNELS; j++) {
-			textureData[i].push(Math.random() > 0.5 ? 1 : 0);
+			textureData[i].push(Math.random() > 1 ? 1 : 0);
 		}
 	}
 
@@ -470,8 +483,11 @@ function setupTextures(
 		device.createTexture({
 			label: `State Texture ${label}`,
 			size: [size.width, size.height],
-			format: format,
-			usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_DST,
+			format: format.storage,
+			usage:
+				GPUTextureUsage.TEXTURE_BINDING |
+				GPUTextureUsage.STORAGE_BINDING |
+				GPUTextureUsage.COPY_DST,
 		})
 	);
 
@@ -500,18 +516,25 @@ function setupInteractions(
 	device: GPUDevice,
 	canvas: HTMLCanvasElement | OffscreenCanvas,
 	texture: { width: number; height: number },
-	size: { width: number; height: number } = { width: 20, height: 20 }
+	size: number = 1000
 ): {
 	buffer: GPUBuffer;
 	data: BufferSource | SharedArrayBuffer;
 	type: GPUBufferBindingType;
 } {
-	let data = new Int32Array(4);
+	let data = new Float32Array(4);
+	var sign = 1;
+
 	let position = { x: 0, y: 0 };
 	let velocity = { x: 0, y: 0 };
 
-	data.set([texture.width, texture.height, position.x, position.y]);
+	data.set([position.x, position.y]);
 	if (canvas instanceof HTMLCanvasElement) {
+		// disable context menu
+		canvas.addEventListener("contextmenu", (event) => {
+			event.preventDefault();
+		});
+
 		// move events
 		["mousemove", "touchmove"].forEach((type) => {
 			canvas.addEventListener(type, (event) => {
@@ -541,27 +564,30 @@ function setupInteractions(
 			canvas.addEventListener(type, (event) => {
 				switch (true) {
 					case event instanceof WheelEvent:
-						velocity.x = event.deltaY / 10;
-						velocity.y = event.deltaY / 10;
+						velocity.x = event.deltaY;
+						velocity.y = event.deltaY;
 						break;
 				}
 
-				size.width += velocity.x;
-				size.height += velocity.y;
-
-				data.set([size.width, size.height], 2);
+				size += velocity.y;
+				data.set([size], 2);
 			});
 		});
 
-		// click events
+		// click events TODO(@gszep) implement right click equivalent for touch devices
 		["mousedown", "touchstart"].forEach((type) => {
 			canvas.addEventListener(type, (event) => {
-				data.set([size.width, size.height], 2);
+				switch (true) {
+					case event instanceof MouseEvent:
+						sign = 1 - event.button;
+						break;
+				}
+				data.set([sign * size], 2);
 			});
 		});
 		["mouseup", "touchend"].forEach((type) => {
 			canvas.addEventListener(type, (event) => {
-				data.set([0, 0], 2);
+				data.set([NaN], 2);
 			});
 		});
 	}
