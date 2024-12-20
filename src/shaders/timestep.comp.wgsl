@@ -27,7 +27,7 @@ fn jacobi_iteration(F: texture_2d<f32>, w: f32, x: vec2<i32>, h: f32) -> f32 {
     return (value(F, x + dx).z + value(F, x - dx).z + value(F, x + dy).z + value(F, x - dy).z + h * w) / 4;
 }
 
-fn advect(F: texture_2d<f32>, x: vec2<i32>, dt: f32) -> vec4<f32> {
+fn advected_value(F: texture_2d<f32>, x: vec2<i32>, dt: f32) -> vec4<f32> {
     let vx = (value(F, x + dy).z - value(F, x - dy).z) / 2;
     let vy = (value(F, x - dx).z - value(F, x + dx).z) / 2;
 
@@ -56,11 +56,12 @@ fn interpolate_value(F: texture_2d<f32>, x: vec2<f32>) -> vec4<f32> {
 fn main(input: Input) {
 
     let x = vec2<i32>(input.globalInvocationID.xy);
-    var Fdt = value(F, x);
-
-    // vorticity timestep
-    Fdt.w = advect(F, x, 1).w + diffusion(F, x).w * 0.04;
     
+    // vorticity timestep
+    var Fdt = advected_value(F, x, 0.5);
+    Fdt.w += diffusion(F, x).w * 0.01;
+
+    // BUG (gszep) use advected values
     // relaxation of poisson equation for stream function
     Fdt.z = jacobi_iteration(F, Fdt.w, x, 1);
 
