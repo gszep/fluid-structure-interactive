@@ -40,13 +40,13 @@ fn value(F: texture_storage_2d<FORMAT, read>, x: vec2<i32>) -> vec4<f32> {
     return textureLoad(F, y % size);
 }
 
-fn interpolate_value(F: texture_2d<f32>, x: vec2<f32>) -> vec4<f32> {
+fn interpolate_value(F: texture_storage_2d<FORMAT, read>, x: vec2<f32>) -> vec4<f32> {
     let f: vec2<f32> = fract(x);
     let sample = vec2<i32>(x + (0.5 - f));
-    let tl: vec4f = textureLoad(F, clamp(sample, dx + dy, size), 0);
-    let tr: vec4f = textureLoad(F, clamp(sample + dx, dx + dy, size), 0);
-    let bl: vec4f = textureLoad(F, clamp(sample + dy, dx + dy, size), 0);
-    let br: vec4f = textureLoad(F, clamp(sample + dx + dy, dx + dy, size), 0);
+    let tl: vec4f = textureLoad(F, clamp(sample, dx + dy, size));
+    let tr: vec4f = textureLoad(F, clamp(sample + dx, dx + dy, size));
+    let bl: vec4f = textureLoad(F, clamp(sample + dy, dx + dy, size));
+    let br: vec4f = textureLoad(F, clamp(sample + dx + dy, dx + dy, size));
     let tA: vec4f = mix(tl, tr, f.x);
     let tB: vec4f = mix(bl, br, f.x);
     return mix(tA, tB, f.y);
@@ -58,8 +58,8 @@ fn main(input: Input) {
     let x = vec2<i32>(input.globalInvocationID.xy);
     
     // vorticity timestep
-    var Fdt = advected_value(F, x, 0.5);
-    Fdt.w += diffusion(F, x).w * 0.01;
+    var Fdt = advected_value(F, x, 1);
+    Fdt.w += diffusion(F, x).w * 0.05;
 
     // BUG (gszep) use advected values
     // relaxation of poisson equation for stream function
