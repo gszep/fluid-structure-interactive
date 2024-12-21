@@ -18,6 +18,7 @@ Other methods can be found [here](https://developer.chrome.com/en/docs/web-platf
 -   Nvidia GPUGem's Chapter 38 : https://developer.nvidia.com/gpugems/gpugems/part-vi-beyond-triangles/chapter-38-fast-fluid-dynamics-simulation-gpu
 -   Jamie Wong's Fluid simulation : https://jamie-wong.com/2016/08/05/webgl-fluid-simulation/
 -   PavelDoGreat's Fluid simulation : https://github.com/PavelDoGreat/WebGL-Fluid-Simulation
+-   Stam's Stable Fluids : https://pages.cs.wisc.edu/~chaol/data/cs777/stam-stable_fluids.pdf
 
 ### WebGPU References
 
@@ -162,3 +163,7 @@ $$
 $$
 
 #### 4. Repeat step 2.
+
+#### 5. Semi-Lagrangian Advection
+
+The semi-Lagrangian advection method traces the characteristics of the flow backward in time and interpolates the values from the previous time step. This ensures stability by tracing the flow backward in time to find the departure point and then interpolating the values from the previous time step at that point.
