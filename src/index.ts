@@ -212,7 +212,9 @@ async function index(): Promise<void> {
 		frame_index++;
 
 		// render pass
-		const view = canvas.context.getCurrentTexture().createView();
+		const texture = canvas.context.getCurrentTexture();
+		const view = texture.createView();
+
 		renderPassDescriptor.colorAttachments[RENDER_INDEX].view = view;
 		const renderPass = command.beginRenderPass(renderPassDescriptor);
 
@@ -224,6 +226,7 @@ async function index(): Promise<void> {
 
 		// submit the command buffer
 		device.queue.submit([command.finish()]);
+		texture.destroy();
 	}
 
 	setInterval(render, UPDATE_INTERVAL);
