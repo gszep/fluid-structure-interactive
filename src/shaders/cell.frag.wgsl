@@ -6,13 +6,15 @@ struct Output {
   @location(RENDER_INDEX) color: vec4<f32>
 };
 
-@group(GROUP_INDEX) @binding(READ_BINDING) var F: texture_2d<f32>;
-@group(GROUP_INDEX) @binding(SAMPLER_BINDING) var Sampler: sampler;
+@group(GROUP_INDEX) @binding(READ_BINDING) var F: texture_storage_2d<FORMAT, read>;
+const size: vec2<f32> = vec2<f32>(WIDTH, HEIGHT);
 
 @fragment
 fn main(input: Input) -> Output {
     var output: Output;
-    let F = textureSample(F, Sampler, (1 + input.coordinate) / 2);
+
+    let x = vec2<i32>((1 + input.coordinate) / 2 * size);
+    let F = textureLoad(F, x);
 
     // vorticity map
     output.color.g = 5 * max(0, F.w);

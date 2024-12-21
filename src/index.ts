@@ -43,20 +43,15 @@ async function index(): Promise<void> {
 		textures.size
 	);
 
-	const SAMPLER_BINDING = 3;
-	const sampler = device.createSampler({
-		addressModeU: "repeat",
-		addressModeV: "repeat",
-	});
-
 	const bindGroupLayout = device.createBindGroupLayout({
 		label: "bindGroupLayout",
 		entries: [
 			{
 				binding: READ_BINDING,
 				visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE,
-				texture: {
-					sampleType: textures.format.sampleType,
+				storageTexture: {
+					access: "read-only",
+					format: textures.format.storage,
 				},
 			},
 			{
@@ -73,11 +68,6 @@ async function index(): Promise<void> {
 				buffer: {
 					type: interactions.type,
 				},
-			},
-			{
-				binding: SAMPLER_BINDING,
-				visibility: GPUShaderStage.FRAGMENT,
-				sampler: {},
 			},
 		],
 	});
@@ -101,10 +91,6 @@ async function index(): Promise<void> {
 						buffer: interactions.buffer,
 					},
 				},
-				{
-					binding: SAMPLER_BINDING,
-					resource: sampler,
-				},
 			],
 		})
 	);
@@ -127,7 +113,7 @@ async function index(): Promise<void> {
 					READ_BINDING: READ_BINDING,
 					WRITE_BINDING: WRITE_BINDING,
 					INTERACTION_BINDING: INTERACTION_BINDING,
-					STORAGE_FORMAT: textures.format.storage,
+					FORMAT: textures.format.storage,
 					WIDTH: textures.size.width,
 					HEIGHT: textures.size.height,
 				}),
@@ -163,7 +149,7 @@ async function index(): Promise<void> {
 			module: device.createShaderModule({
 				code: setValues(cellFragmentShader, {
 					GROUP_INDEX: GROUP_INDEX,
-					SAMPLER_BINDING: SAMPLER_BINDING,
+					FORMAT: textures.format.storage,
 					READ_BINDING: READ_BINDING,
 					VERTEX_INDEX: VERTEX_INDEX,
 					RENDER_INDEX: RENDER_INDEX,
@@ -212,7 +198,9 @@ async function index(): Promise<void> {
 		frame_index++;
 
 		// render pass
-		const view = canvas.context.getCurrentTexture().createView();
+		const texture = canvas.context.getCurrentTexture();
+		const view = texture.createView();
+
 		renderPassDescriptor.colorAttachments[RENDER_INDEX].view = view;
 		const renderPass = command.beginRenderPass(renderPassDescriptor);
 
@@ -224,6 +212,7 @@ async function index(): Promise<void> {
 
 		// submit the command buffer
 		device.queue.submit([command.finish()]);
+		texture.destroy();
 	}
 
 	setInterval(render, UPDATE_INTERVAL);
