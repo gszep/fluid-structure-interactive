@@ -537,61 +537,79 @@ function setupInteractions(
 
 		// move events
 		["mousemove", "touchmove"].forEach((type) => {
-			canvas.addEventListener(type, (event) => {
-				switch (true) {
-					case event instanceof MouseEvent:
-						position.x = event.offsetX;
-						position.y = event.offsetY;
-						break;
+			canvas.addEventListener(
+				type,
+				(event) => {
+					switch (true) {
+						case event instanceof MouseEvent:
+							position.x = event.offsetX;
+							position.y = event.offsetY;
+							break;
 
-					case event instanceof TouchEvent:
-						position.x = event.touches[0].clientX;
-						position.y = event.touches[0].clientY;
-						break;
-				}
+						case event instanceof TouchEvent:
+							position.x = event.touches[0].clientX;
+							position.y = event.touches[0].clientY;
+							break;
+					}
 
-				let x = Math.floor((position.x / canvas.width) * texture.width);
-				let y = Math.floor(
-					(position.y / canvas.height) * texture.height
-				);
+					let x = Math.floor(
+						(position.x / canvas.width) * texture.width
+					);
+					let y = Math.floor(
+						(position.y / canvas.height) * texture.height
+					);
 
-				data.set([x, y]);
-			});
+					data.set([x, y]);
+				},
+				{ passive: true }
+			);
 		});
 
 		// zoom events TODO(@gszep) add pinch and scroll for touch devices
 		["wheel"].forEach((type) => {
-			canvas.addEventListener(type, (event) => {
-				switch (true) {
-					case event instanceof WheelEvent:
-						velocity.x = event.deltaY;
-						velocity.y = event.deltaY;
-						break;
-				}
+			canvas.addEventListener(
+				type,
+				(event) => {
+					switch (true) {
+						case event instanceof WheelEvent:
+							velocity.x = event.deltaY;
+							velocity.y = event.deltaY;
+							break;
+					}
 
-				size += velocity.y;
-				data.set([size], 2);
-			});
+					size += velocity.y;
+					data.set([size], 2);
+				},
+				{ passive: true }
+			);
 		});
 
 		// click events TODO(@gszep) implement right click equivalent for touch devices
 		["mousedown", "touchstart"].forEach((type) => {
-			canvas.addEventListener(type, (event) => {
-				switch (true) {
-					case event instanceof MouseEvent:
-						sign = 1 - event.button;
-						break;
+			canvas.addEventListener(
+				type,
+				(event) => {
+					switch (true) {
+						case event instanceof MouseEvent:
+							sign = 1 - event.button;
+							break;
 
-					case event instanceof TouchEvent:
-						sign = event.touches.length > 1 ? -1 : 1;
-				}
-				data.set([sign * size], 2);
-			});
+						case event instanceof TouchEvent:
+							sign = event.touches.length > 1 ? -1 : 1;
+					}
+					data.set([sign * size], 2);
+				},
+				{ passive: true }
+			);
 		});
 		["mouseup", "touchend"].forEach((type) => {
-			canvas.addEventListener(type, (event) => {
-				data.set([NaN], 2);
-			});
+			canvas.addEventListener(
+				type,
+				(event) => {
+					data.set([NaN], 2);
+				},
+				{ passive: true }
+			);
 		});
 	}
 	const uniformBuffer = device.createBuffer({
