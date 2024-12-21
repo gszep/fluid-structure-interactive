@@ -9,25 +9,24 @@ struct Interaction {
     size: f32,
 };
 
-@group(GROUP_INDEX) @binding(READ_BINDING) var F: texture_2d<f32>;
-const size: vec2<i32> = vec2<i32>(WIDTH, HEIGHT);
-const level: i32 = 0;
-
 const dx = vec2<i32>(1, 0);
 const dy = vec2<i32>(0, 1);
 
-@group(GROUP_INDEX) @binding(WRITE_BINDING) var Fdash: texture_storage_2d<STORAGE_FORMAT, write>;
+@group(GROUP_INDEX) @binding(READ_BINDING) var F: texture_storage_2d<FORMAT, read>;
+const size: vec2<i32> = vec2<i32>(WIDTH, HEIGHT);
+
+@group(GROUP_INDEX) @binding(WRITE_BINDING) var Fdash: texture_storage_2d<FORMAT, write>;
 @group(GROUP_INDEX) @binding(INTERACTION_BINDING) var<uniform> interaction: Interaction;
 
-fn diffusion(F: texture_2d<f32>, x: vec2<i32>) -> vec4<f32> {
+fn diffusion(F: texture_storage_2d<FORMAT, read>, x: vec2<i32>) -> vec4<f32> {
     return value(F, x + dx) + value(F, x - dx) + value(F, x + dy) + value(F, x - dy) - 4 * value(F, x);
 }
 
-fn jacobi_iteration(F: texture_2d<f32>, w: f32, x: vec2<i32>, h: f32) -> f32 {
+fn jacobi_iteration(F: texture_storage_2d<FORMAT, read>, w: f32, x: vec2<i32>, h: f32) -> f32 {
     return (value(F, x + dx).z + value(F, x - dx).z + value(F, x + dy).z + value(F, x - dy).z + h * w) / 4;
 }
 
-fn advection(F: texture_2d<f32>, x: vec2<i32>) -> f32 {
+fn advection(F: texture_storage_2d<FORMAT, read>, x: vec2<i32>) -> f32 {
     let vx = (value(F, x + dy).z - value(F, x - dy).z) / 2;
     let vy = (value(F, x - dx).z - value(F, x + dx).z) / 2;
 
@@ -38,9 +37,9 @@ fn advection(F: texture_2d<f32>, x: vec2<i32>) -> f32 {
 }
 
 
-fn value(F: texture_2d<f32>, x: vec2<i32>) -> vec4<f32> {
+fn value(F: texture_storage_2d<FORMAT, read>, x: vec2<i32>) -> vec4<f32> {
     let y = x + size ; // not sure why this is necessary
-    return textureLoad(F, y % size, level);
+    return textureLoad(F, y % size);
 }
 
 @compute @workgroup_size(WORKGROUP_SIZE, WORKGROUP_SIZE)

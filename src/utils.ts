@@ -484,10 +484,7 @@ function setupTextures(
 			label: `State Texture ${label}`,
 			size: [size.width, size.height],
 			format: format.storage,
-			usage:
-				GPUTextureUsage.TEXTURE_BINDING |
-				GPUTextureUsage.STORAGE_BINDING |
-				GPUTextureUsage.COPY_DST,
+			usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_DST,
 		})
 	);
 
