@@ -9,6 +9,13 @@ struct Interaction {
     size: f32,
 };
 
+struct Curl {
+    x: vec2<f32>,
+    y: vec2<f32>,
+    z: vec2<f32>,
+    w: vec2<f32>,
+};
+
 const dx = vec2<i32>(1, 0);
 const dy = vec2<i32>(0, 1);
 
@@ -22,22 +29,32 @@ fn laplacian(F: texture_storage_2d<FORMAT, read>, x: vec2<i32>) -> vec4<f32> {
     return value(F, x + dx) + value(F, x - dx) + value(F, x + dy) + value(F, x - dy) - 4 * value(F, x);
 }
 
+fn curl(F: texture_storage_2d<FORMAT, read>, x: vec2<i32>) -> Curl {
+
+    let u = (value(F, x + dy) - value(F, x - dy)) / 2;
+    let v = (value(F, x - dx) - value(F, x + dx)) / 2;
+    var w: Curl;
+
+    w.x = vec2<f32>(u.x, v.x);
+    w.y = vec2<f32>(u.y, v.y);
+    w.z = vec2<f32>(u.z, v.z);
+    w.w = vec2<f32>(u.w, v.w);
+
+    return w;
+}
+
 fn jacobi_iteration(F: texture_storage_2d<FORMAT, read>, w: f32, x: vec2<i32>, h: f32) -> f32 {
     return (value(F, x + dx).z + value(F, x - dx).z + value(F, x + dy).z + value(F, x - dy).z + h * w) / 4;
 }
 
 fn advected_value(F: texture_storage_2d<FORMAT, read>, x: vec2<i32>, dt: f32) -> vec4<f32> {
-    let vx = (value(F, x + dy).z - value(F, x - dy).z) / 2;
-    let vy = (value(F, x - dx).z - value(F, x + dx).z) / 2;
-
-    let y = vec2<f32>(x) - vec2<f32>(vx, vy) * dt;
+    let y = vec2<f32>(x) - curl(F, x).z * dt;
     return interpolate_value(F, y);
 }
 
-
 fn value(F: texture_storage_2d<FORMAT, read>, x: vec2<i32>) -> vec4<f32> {
     let y = x + size ; // not sure why this is necessary
-    return textureLoad(F, y % size);
+    return textureLoad(F, y % size);  // periodic boundary conditions
 }
 
 fn interpolate_value(F: texture_storage_2d<FORMAT, read>, x: vec2<f32>) -> vec4<f32> {
@@ -64,14 +81,22 @@ fn interpolate_value(F: texture_storage_2d<FORMAT, read>, x: vec2<f32>) -> vec4<
 fn main(input: Input) {
 
     let x = vec2<i32>(input.globalInvocationID.xy);
-    
+
+    if !(interaction.size < 1000000) {
+        var Fdt = value(F, x);
+        Fdt.z = jacobi_iteration(F, Fdt.w, x, 10);
+
+        Fdt.x = abs(laplacian(F, x).z + value(F, x).w) / (1 + value(F, x).w);
+        textureStore(Fdash, x, Fdt);
+        return;
+    }
     // vorticity timestep
     var Fdt = advected_value(F, x, 1);
     Fdt.w += laplacian(F, x).w * 0.05;
 
     // BUG (gszep) use advected values
     // relaxation of poisson equation for stream function
-    Fdt.z = jacobi_iteration(F, Fdt.w, x, 1);
+    // Fdt.z = jacobi_iteration(F, Fdt.w, x, 1);
 
     // error calculation
     Fdt.x = abs(laplacian(F, x).z + value(F, x).w) / (1 + value(F, x).w);

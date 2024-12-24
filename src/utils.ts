@@ -525,7 +525,7 @@ function setupInteractions(
 	let position = { x: 0, y: 0 };
 	let velocity = { x: 0, y: 0 };
 
-	data.set([position.x, position.y]);
+	data.set([position.x, position.y, NaN, NaN]);
 	if (canvas instanceof HTMLCanvasElement) {
 		// disable context menu
 		canvas.addEventListener("contextmenu", (event) => {

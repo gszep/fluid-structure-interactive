@@ -21,8 +21,8 @@ fn main(input: Input) -> Output {
     output.color.r = 5 * max(0, -F.w);
 
     // stream function map
-    // output.color.b = abs(F.z);
+    output.color.b = abs(F.z);
 
-    output.color.a = 1;//F.x;
+    output.color.a = F.x;
     return output;
 }
