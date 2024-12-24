@@ -18,7 +18,7 @@ const size: vec2<i32> = vec2<i32>(WIDTH, HEIGHT);
 @group(GROUP_INDEX) @binding(WRITE_BINDING) var Fdash: texture_storage_2d<FORMAT, write>;
 @group(GROUP_INDEX) @binding(INTERACTION_BINDING) var<uniform> interaction: Interaction;
 
-fn diffusion(F: texture_storage_2d<FORMAT, read>, x: vec2<i32>) -> vec4<f32> {
+fn laplacian(F: texture_storage_2d<FORMAT, read>, x: vec2<i32>) -> vec4<f32> {
     return value(F, x + dx) + value(F, x - dx) + value(F, x + dy) + value(F, x - dy) - 4 * value(F, x);
 }
 
@@ -41,15 +41,23 @@ fn value(F: texture_storage_2d<FORMAT, read>, x: vec2<i32>) -> vec4<f32> {
 }
 
 fn interpolate_value(F: texture_storage_2d<FORMAT, read>, x: vec2<f32>) -> vec4<f32> {
-    let f: vec2<f32> = fract(x);
-    let sample = vec2<i32>(x + (0.5 - f));
-    let tl: vec4f = textureLoad(F, clamp(sample, dx + dy, size));
-    let tr: vec4f = textureLoad(F, clamp(sample + dx, dx + dy, size));
-    let bl: vec4f = textureLoad(F, clamp(sample + dy, dx + dy, size));
-    let br: vec4f = textureLoad(F, clamp(sample + dx + dy, dx + dy, size));
-    let tA: vec4f = mix(tl, tr, f.x);
-    let tB: vec4f = mix(bl, br, f.x);
-    return mix(tA, tB, f.y);
+
+    let fraction = fract(x);
+    let y = vec2<i32>(x + (0.5 - fraction));
+
+    return mix(
+        mix(
+            value(F, y),
+            value(F, y + dx),
+            fraction.x
+        ),
+        mix(
+            value(F, y + dy),
+            value(F, y + dx + dy),
+            fraction.x
+        ),
+        fraction.y
+    );
 }
 
 @compute @workgroup_size(WORKGROUP_SIZE, WORKGROUP_SIZE)
@@ -59,14 +67,14 @@ fn main(input: Input) {
     
     // vorticity timestep
     var Fdt = advected_value(F, x, 1);
-    Fdt.w += diffusion(F, x).w * 0.05;
+    Fdt.w += laplacian(F, x).w * 0.05;
 
     // BUG (gszep) use advected values
     // relaxation of poisson equation for stream function
     Fdt.z = jacobi_iteration(F, Fdt.w, x, 1);
 
     // error calculation
-    Fdt.x = abs(diffusion(F, x).z + value(F, x).w) / (1 + value(F, x).w);
+    Fdt.x = abs(laplacian(F, x).z + value(F, x).w) / (1 + value(F, x).w);
 
     // brush interaction
     let distance = vec2<f32>(x) - interaction.position;
