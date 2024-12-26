@@ -643,7 +643,7 @@
 				}
 				async function requestDevice(
 					options = { powerPreference: "high-performance" },
-					requiredFeatures = ["float32-filterable"]
+					requiredFeatures = []
 				) {
 					if (!navigator.gpu)
 						throwDetectionError("WebGPU NOT Supported");
