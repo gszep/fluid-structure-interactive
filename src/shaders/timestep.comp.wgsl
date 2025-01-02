@@ -26,7 +26,8 @@ const size: vec2<i32> = vec2<i32>(WIDTH, HEIGHT);
 @group(GROUP_INDEX) @binding(INTERACTION_BINDING) var<uniform> interaction: Interaction;
 
 fn laplacian(F: texture_storage_2d<FORMAT, read>, x: vec2<i32>) -> vec4<f32> {
-    return value(F, x + dx) + value(F, x - dx) + value(F, x + dy) + value(F, x - dy) - 4 * value(F, x);
+    // 9-point stencil
+    return (4 * value(F, x + dx) + 4 * value(F, x - dx) + 4 * value(F, x + dy) + 4 * value(F, x - dy) - 20 * value(F, x) + value(F, x + dx + dy) + value(F, x - dx + dy) + value(F, x + dx - dy) + value(F, x - dx - dy)) / 6;
 }
 
 fn curl(F: texture_storage_2d<FORMAT, read>, x: vec2<i32>) -> Curl {
@@ -43,8 +44,8 @@ fn curl(F: texture_storage_2d<FORMAT, read>, x: vec2<i32>) -> Curl {
     return w;
 }
 
-fn jacobi_iteration(F: texture_storage_2d<FORMAT, read>, w: f32, x: vec2<i32>, h: f32) -> f32 {
-    return (value(F, x + dx).z + value(F, x - dx).z + value(F, x + dy).z + value(F, x - dy).z + h * w) / 4;
+fn jacobi_iteration(F: texture_storage_2d<FORMAT, read>, x: vec2<i32>, h: f32) -> f32 {
+    return (value(F, x + dx).z + value(F, x - dx).z + value(F, x + dy).z + value(F, x - dy).z + h * value(F, x).w) / 4.0;
 }
 
 fn advected_value(F: texture_storage_2d<FORMAT, read>, x: vec2<i32>, dt: f32) -> vec4<f32> {
@@ -81,25 +82,11 @@ fn interpolate_value(F: texture_storage_2d<FORMAT, read>, x: vec2<f32>) -> vec4<
 fn main(input: Input) {
 
     let x = vec2<i32>(input.globalInvocationID.xy);
+    var Fdt = value(F, x);
 
-    if !(interaction.size < 1000000) {
-        var Fdt = value(F, x);
-        Fdt.z = jacobi_iteration(F, Fdt.w, x, 10);
-
-        Fdt.x = abs(laplacian(F, x).z + value(F, x).w) / (1 + value(F, x).w);
-        textureStore(Fdash, x, Fdt);
-        return;
-    }
     // vorticity timestep
-    var Fdt = advected_value(F, x, 1);
-    Fdt.w += laplacian(F, x).w * 0.05;
-
-    // BUG (gszep) use advected values
-    // relaxation of poisson equation for stream function
-    // Fdt.z = jacobi_iteration(F, Fdt.w, x, 1);
-
-    // error calculation
-    Fdt.x = abs(laplacian(F, x).z + value(F, x).w) / (1 + value(F, x).w);
+    Fdt.w = advected_value(F, x, 1).w + laplacian(F, x).w * 0.05;
+    Fdt.z += (Fdt.w + laplacian(F, x).z) * 0.01;
 
     // brush interaction
     let distance = vec2<f32>(x) - interaction.position;
@@ -109,5 +96,7 @@ fn main(input: Input) {
         Fdt.w += 0.01 * sign(interaction.size) * exp(- norm / abs(interaction.size));
     }
 
+    // error calculation
+    Fdt.x = 1; //abs(laplacian(F, x).z + value(F, x).w);
     textureStore(Fdash, x, Fdt);
 }
