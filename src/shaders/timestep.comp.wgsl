@@ -76,7 +76,7 @@ fn main(input: Input) {
 
     var brush = 0.0;
     if sqrt(norm) < abs(interaction.size) {
-        brush += sign(interaction.size) * exp(- norm / abs(interaction.size));
+        brush += 0.1 * sign(interaction.size) * exp(- norm / abs(interaction.size));
     }
 
     // vorticity timestep

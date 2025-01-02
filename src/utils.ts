@@ -509,7 +509,7 @@ function setupInteractions(
 	device: GPUDevice,
 	canvas: HTMLCanvasElement | OffscreenCanvas,
 	texture: { width: number; height: number },
-	size: number = 1000
+	size: number = 100
 ): {
 	buffer: GPUBuffer;
 	data: BufferSource | SharedArrayBuffer;
