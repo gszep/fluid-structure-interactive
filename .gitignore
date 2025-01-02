@@ -9,5 +9,5 @@ node_modules
 !docs/index.html
 !docs/index.bundle.js
 !docs/runtime.bundle.js
-!docs/outtakes/*.bundle.js
+!docs/*/*.bundle.js
 !webpack.config.js
