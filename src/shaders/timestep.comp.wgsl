@@ -83,7 +83,7 @@ fn main(input: Input) {
     textureStore(omega, x, advected_value(omega, x, 0.01) + laplacian(omega, x) * 0.001 + brush);
 
     // stream function calculation
-    for (var i = 0; i < 100; i = i + 1) {
+    for (var i = 0; i < 50; i = i + 1) {
         textureStore(phi, x, jacobi_iteration(phi, omega, x));
     }
 
