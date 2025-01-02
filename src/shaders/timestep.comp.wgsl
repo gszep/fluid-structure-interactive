@@ -12,10 +12,10 @@ struct Interaction {
 const dx = vec2<i32>(1, 0);
 const dy = vec2<i32>(0, 1);
 
-// @group(GROUP_INDEX) @binding(READ_BINDING) var F: texture_storage_2d<FORMAT, read>;
 const size: vec2<i32> = vec2<i32>(WIDTH, HEIGHT);
 
-@group(GROUP_INDEX) @binding(VORTICITY) var W: texture_storage_2d<FORMAT, read_write>;
+@group(GROUP_INDEX) @binding(VORTICITY) var omega: texture_storage_2d<FORMAT, read_write>;
+@group(GROUP_INDEX) @binding(STREAMFUNCTION) var phi: texture_storage_2d<FORMAT, read_write>;
 @group(GROUP_INDEX) @binding(INTERACTION_BINDING) var<uniform> interaction: Interaction;
 
 fn diffusion(F: texture_storage_2d<FORMAT, read_write>, x: vec2<i32>) -> vec4<f32> {
@@ -58,8 +58,7 @@ fn main(input: Input) {
     let x = vec2<i32>(input.globalInvocationID.xy);
     
     // vorticity timestep
-    var Wdt = value(W, x);
-    Wdt += diffusion(W, x) * 0.01;
+    var domega = advected_value(omega, x, 1) + diffusion(omega, x) * 0.1;
 
     // BUG (gszep) use advected values
     // relaxation of poisson equation for stream function
@@ -73,8 +72,8 @@ fn main(input: Input) {
     let norm = dot(distance, distance);
 
     if sqrt(norm) < abs(interaction.size) {
-        Wdt += 0.01 * sign(interaction.size) * exp(- norm / abs(interaction.size));
+        domega += 0.01 * sign(interaction.size) * exp(- norm / abs(interaction.size));
     }
 
-    textureStore(W, x, Wdt);
+    textureStore(omega, x, domega);
 }
