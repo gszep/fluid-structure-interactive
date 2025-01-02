@@ -449,22 +449,17 @@ function setupVertexBuffer(
 
 function setupTextures(
 	device: GPUDevice,
+	bindings: number[],
 	size: { width: number; height: number },
 	format: {
-		sampleType: GPUTextureSampleType;
 		storage: GPUTextureFormat;
-		texture: string;
 	} = {
-		sampleType: "float",
-		storage: "rgba32float",
-		texture: "f32",
+		storage: "r32float",
 	}
 ): {
-	textures: GPUTexture[];
+	textures: { [key: number]: GPUTexture };
 	format: {
-		sampleType: GPUTextureSampleType;
 		storage: GPUTextureFormat;
-		texture: string;
 	};
 	size: { width: number; height: number };
 } {
@@ -475,35 +470,36 @@ function setupTextures(
 		textureData[i] = [];
 
 		for (let j = 0; j < CHANNELS; j++) {
-			textureData[i].push(Math.random() > 1 ? 1 : 0);
+			textureData[i].push(Math.random() > 0 ? 0 : -1);
 		}
 	}
 
-	const stateTextures = ["A", "B"].map((label) =>
-		device.createTexture({
-			label: `State Texture ${label}`,
+	const textures: { [key: number]: GPUTexture } = {};
+	bindings.forEach((key) => {
+		textures[key] = device.createTexture({
+			label: `Texture ${key}`,
 			size: [size.width, size.height],
 			format: format.storage,
 			usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_DST,
-		})
-	);
+		});
+	});
 
-	const texture = stateTextures[0];
 	const array = new Float32Array(textureData.flat());
-
-	device.queue.writeTexture(
-		{ texture },
-		/*data=*/ array,
-		/*dataLayout=*/ {
-			offset: 0,
-			bytesPerRow: size.width * array.BYTES_PER_ELEMENT * CHANNELS,
-			rowsPerImage: size.height,
-		},
-		/*size=*/ size
-	);
+	Object.values(textures).forEach((texture) => {
+		device.queue.writeTexture(
+			{ texture },
+			/*data=*/ array,
+			/*dataLayout=*/ {
+				offset: 0,
+				bytesPerRow: size.width * array.BYTES_PER_ELEMENT * CHANNELS,
+				rowsPerImage: size.height,
+			},
+			/*size=*/ size
+		);
+	});
 
 	return {
-		textures: stateTextures,
+		textures: textures,
 		format: format,
 		size: size,
 	};
@@ -513,7 +509,7 @@ function setupInteractions(
 	device: GPUDevice,
 	canvas: HTMLCanvasElement | OffscreenCanvas,
 	texture: { width: number; height: number },
-	size: number = 1000
+	size: number = 100
 ): {
 	buffer: GPUBuffer;
 	data: BufferSource | SharedArrayBuffer;

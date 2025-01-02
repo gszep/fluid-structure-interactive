@@ -24,12 +24,18 @@ async function index(): Promise<void> {
 	// initialize vertex buffer and textures
 	const VERTEX_INDEX = 0;
 	const QUAD = [-1, -1, 1, -1, 1, 1, -1, -1, 1, 1, -1, 1];
-
 	const quad = setupVertexBuffer(device, "Quad Vertex Buffer", QUAD);
-	const textures = setupTextures(device, canvas.size);
 
-	const READ_BINDING = 0;
-	const WRITE_BINDING = 1;
+	const VORTICITY = 0;
+	const STREAMFUNCTION = 1;
+	const DEBUG = 3;
+
+	const textures = setupTextures(
+		device,
+		[VORTICITY, STREAMFUNCTION, DEBUG],
+		canvas.size
+	);
+
 	const WORKGROUP_COUNT: [number, number] = [
 		Math.ceil(textures.size.width / WORKGROUP_SIZE),
 		Math.ceil(textures.size.height / WORKGROUP_SIZE),
@@ -47,18 +53,18 @@ async function index(): Promise<void> {
 		label: "bindGroupLayout",
 		entries: [
 			{
-				binding: READ_BINDING,
+				binding: VORTICITY,
 				visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE,
 				storageTexture: {
-					access: "read-only",
+					access: "read-write",
 					format: textures.format.storage,
 				},
 			},
 			{
-				binding: WRITE_BINDING,
-				visibility: GPUShaderStage.COMPUTE,
+				binding: STREAMFUNCTION,
+				visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE,
 				storageTexture: {
-					access: "write-only",
+					access: "read-write",
 					format: textures.format.storage,
 				},
 			},
@@ -69,31 +75,41 @@ async function index(): Promise<void> {
 					type: interactions.type,
 				},
 			},
+			{
+				binding: DEBUG,
+				visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE,
+				storageTexture: {
+					access: "read-write",
+					format: textures.format.storage,
+				},
+			},
 		],
 	});
 
-	const bindGroups = [0, 1].map((i) =>
-		device.createBindGroup({
-			label: `Bind Group > ${textures.textures[i].label}`,
-			layout: bindGroupLayout,
-			entries: [
-				{
-					binding: READ_BINDING,
-					resource: textures.textures[i % 2].createView(),
+	const bindGroup = device.createBindGroup({
+		label: `Bind Group`,
+		layout: bindGroupLayout,
+		entries: [
+			{
+				binding: VORTICITY,
+				resource: textures.textures[VORTICITY].createView(),
+			},
+			{
+				binding: STREAMFUNCTION,
+				resource: textures.textures[STREAMFUNCTION].createView(),
+			},
+			{
+				binding: INTERACTION_BINDING,
+				resource: {
+					buffer: interactions.buffer,
 				},
-				{
-					binding: WRITE_BINDING,
-					resource: textures.textures[(i + 1) % 2].createView(),
-				},
-				{
-					binding: INTERACTION_BINDING,
-					resource: {
-						buffer: interactions.buffer,
-					},
-				},
-			],
-		})
-	);
+			},
+			{
+				binding: DEBUG,
+				resource: textures.textures[DEBUG].createView(),
+			},
+		],
+	});
 
 	const pipelineLayout = device.createPipelineLayout({
 		label: "pipelineLayout",
@@ -110,8 +126,9 @@ async function index(): Promise<void> {
 				code: setValues(timestepComputeShader, {
 					WORKGROUP_SIZE: WORKGROUP_SIZE,
 					GROUP_INDEX: GROUP_INDEX,
-					READ_BINDING: READ_BINDING,
-					WRITE_BINDING: WRITE_BINDING,
+					VORTICITY: VORTICITY,
+					STREAMFUNCTION: STREAMFUNCTION,
+					DEBUG: DEBUG,
 					INTERACTION_BINDING: INTERACTION_BINDING,
 					FORMAT: textures.format.storage,
 					WIDTH: textures.size.width,
@@ -150,7 +167,9 @@ async function index(): Promise<void> {
 				code: setValues(cellFragmentShader, {
 					GROUP_INDEX: GROUP_INDEX,
 					FORMAT: textures.format.storage,
-					READ_BINDING: READ_BINDING,
+					VORTICITY: VORTICITY,
+					STREAMFUNCTION: STREAMFUNCTION,
+					DEBUG: DEBUG,
 					VERTEX_INDEX: VERTEX_INDEX,
 					RENDER_INDEX: RENDER_INDEX,
 					WIDTH: textures.size.width,
@@ -184,7 +203,7 @@ async function index(): Promise<void> {
 		const computePass = command.beginComputePass();
 
 		computePass.setPipeline(computePipeline);
-		computePass.setBindGroup(GROUP_INDEX, bindGroups[frame_index % 2]);
+		computePass.setBindGroup(GROUP_INDEX, bindGroup);
 
 		device.queue.writeBuffer(
 			interactions.buffer,
@@ -195,8 +214,6 @@ async function index(): Promise<void> {
 		computePass.dispatchWorkgroups(...WORKGROUP_COUNT);
 		computePass.end();
 
-		frame_index++;
-
 		// render pass
 		const texture = canvas.context.getCurrentTexture();
 		const view = texture.createView();
@@ -205,7 +222,7 @@ async function index(): Promise<void> {
 		const renderPass = command.beginRenderPass(renderPassDescriptor);
 
 		renderPass.setPipeline(renderPipeline);
-		renderPass.setBindGroup(GROUP_INDEX, bindGroups[frame_index % 2]);
+		renderPass.setBindGroup(GROUP_INDEX, bindGroup);
 		renderPass.setVertexBuffer(VERTEX_INDEX, quad.vertexBuffer);
 		renderPass.draw(quad.vertexCount);
 		renderPass.end();
@@ -213,6 +230,7 @@ async function index(): Promise<void> {
 		// submit the command buffer
 		device.queue.submit([command.finish()]);
 		texture.destroy();
+		frame_index++;
 	}
 
 	setInterval(render, UPDATE_INTERVAL);
