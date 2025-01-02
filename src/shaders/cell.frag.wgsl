@@ -8,6 +8,7 @@ struct Output {
 
 @group(GROUP_INDEX) @binding(VORTICITY) var omega: texture_storage_2d<FORMAT, read_write>;
 @group(GROUP_INDEX) @binding(STREAMFUNCTION) var phi: texture_storage_2d<FORMAT, read_write>;
+@group(GROUP_INDEX) @binding(DEBUG) var debug: texture_storage_2d<FORMAT, read_write>;
 
 const size: vec2<f32> = vec2<f32>(WIDTH, HEIGHT);
 
@@ -22,9 +23,9 @@ fn main(input: Input) -> Output {
     output.color.r = 5 * max(0, -omega.r);
 
     // stream function map
-    let phi = textureLoad(phi, x);
-    output.color.b = abs(phi.r);
+    // let phi = textureLoad(phi, x);
+    // output.color.b = abs(phi.r);
 
-    output.color.a = 1;
+    output.color.a = 1;//textureLoad(debug, x).r;
     return output;
 }

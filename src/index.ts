@@ -28,10 +28,11 @@ async function index(): Promise<void> {
 
 	const VORTICITY = 0;
 	const STREAMFUNCTION = 1;
+	const DEBUG = 3;
 
 	const textures = setupTextures(
 		device,
-		[VORTICITY, STREAMFUNCTION],
+		[VORTICITY, STREAMFUNCTION, DEBUG],
 		canvas.size
 	);
 
@@ -74,6 +75,14 @@ async function index(): Promise<void> {
 					type: interactions.type,
 				},
 			},
+			{
+				binding: DEBUG,
+				visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE,
+				storageTexture: {
+					access: "read-write",
+					format: textures.format.storage,
+				},
+			},
 		],
 	});
 
@@ -95,6 +104,10 @@ async function index(): Promise<void> {
 					buffer: interactions.buffer,
 				},
 			},
+			{
+				binding: DEBUG,
+				resource: textures.textures[DEBUG].createView(),
+			},
 		],
 	});
 
@@ -115,6 +128,7 @@ async function index(): Promise<void> {
 					GROUP_INDEX: GROUP_INDEX,
 					VORTICITY: VORTICITY,
 					STREAMFUNCTION: STREAMFUNCTION,
+					DEBUG: DEBUG,
 					INTERACTION_BINDING: INTERACTION_BINDING,
 					FORMAT: textures.format.storage,
 					WIDTH: textures.size.width,
@@ -155,6 +169,7 @@ async function index(): Promise<void> {
 					FORMAT: textures.format.storage,
 					VORTICITY: VORTICITY,
 					STREAMFUNCTION: STREAMFUNCTION,
+					DEBUG: DEBUG,
 					VERTEX_INDEX: VERTEX_INDEX,
 					RENDER_INDEX: RENDER_INDEX,
 					WIDTH: textures.size.width,

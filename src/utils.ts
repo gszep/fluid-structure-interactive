@@ -470,7 +470,7 @@ function setupTextures(
 		textureData[i] = [];
 
 		for (let j = 0; j < CHANNELS; j++) {
-			textureData[i].push(Math.random() > 0.5 ? 1 : -1);
+			textureData[i].push(Math.random() > 0 ? 0 : -1);
 		}
 	}
 
