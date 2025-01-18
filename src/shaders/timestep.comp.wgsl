@@ -20,10 +20,27 @@ const size: vec2<i32> = vec2<i32>(WIDTH, HEIGHT);
 @group(GROUP_INDEX) @binding(INTERACTION_BINDING) var<uniform> interaction: Interaction;
 
 fn laplacian(F: texture_storage_2d<FORMAT, read_write>, x: vec2<i32>) -> vec4<f32> {
-    return (4 * value(F, x + dx) + 4 * value(F, x - dx) + 4 * value(F, x + dy) + 4 * value(F, x - dy) - 20 * value(F, x) + value(F, x + dx + dy) + value(F, x - dx + dy) + value(F, x + dx - dy) + value(F, x - dx - dy)) / 6;
+    return  value(F, x + dx) + value(F, x - dx) + value(F, x + dy) + value(F, x - dy) - 4 * value(F, x);
 }
 
 fn curl(F: texture_storage_2d<FORMAT, read_write>, x: vec2<i32>) -> vec2<f32> {
+    // curl of a scalar field yields a vector defined as (u,v) := (dF/dy, -dF/dx)
+    // we approximate the derivatives using central differences with a staggered grid
+    // where scalar field F is defined at the center and vector components (u,v) are
+    // defined parallel to the edges of the cell.
+    //
+    //              |   F+dy  |      
+    //              |         |    
+    //       ———————|——— u1 ——|———————
+    //              |         |
+    //        F-dx  v0   F   v1   F+dx
+    //              |         |
+    //       ———————|—— u0 ———|———————
+    //              |         |
+    //              |   F-dy  |    
+    //
+    // the resulting vector field is defined at the center.
+    // Bi-linear interpolation is used to approximate.
 
     let u = (value(F, x + dy) - value(F, x - dy)) / 2;
     let v = (value(F, x - dx) - value(F, x + dx)) / 2;
@@ -31,8 +48,8 @@ fn curl(F: texture_storage_2d<FORMAT, read_write>, x: vec2<i32>) -> vec2<f32> {
     return vec2<f32>(u.x, v.x);
 }
 
-fn jacobi_iteration(F: texture_storage_2d<FORMAT, read_write>, W: texture_storage_2d<FORMAT, read_write>, x: vec2<i32>) -> vec4<f32> {
-    return (value(F, x + dx) + value(F, x - dx) + value(F, x + dy) + value(F, x - dy) + value(W, x)) / 4.0;
+fn jacobi_iteration(F: texture_storage_2d<FORMAT, read_write>, G: texture_storage_2d<FORMAT, read_write>, x: vec2<i32>, relaxation: f32) -> vec4<f32> {
+    return (1 - relaxation) * value(F, x) + (relaxation / 4) * (value(F, x + dx) + value(F, x - dx) + value(F, x + dy) + value(F, x - dy) + value(G, x));
 }
 
 fn advected_value(F: texture_storage_2d<FORMAT, read_write>, x: vec2<i32>, dt: f32) -> vec4<f32> {
@@ -41,7 +58,7 @@ fn advected_value(F: texture_storage_2d<FORMAT, read_write>, x: vec2<i32>, dt: f
 }
 
 fn value(F: texture_storage_2d<FORMAT, read_write>, x: vec2<i32>) -> vec4<f32> {
-    let y = x + size ; // not sure why this is necessary
+    let y = x + size; // ensure positive coordinates
     return textureLoad(F, y % size);  // periodic boundary conditions
 }
 
@@ -82,9 +99,17 @@ fn main(input: Input) {
     // vorticity timestep
     textureStore(omega, x, advected_value(omega, x, 0.01) + laplacian(omega, x) * 0.001 + brush);
 
-    // stream function calculation
-    for (var i = 0; i < 50; i = i + 1) {
-        textureStore(phi, x, jacobi_iteration(phi, omega, x));
+    // solve poisson equation for stream function
+    const relaxation = 1.5;
+    for (var i = 0; i < 4; i = i + 1) {
+        workgroupBarrier();
+        if (x.x + x.y) % 2 == 0 {
+            textureStore(phi, x, jacobi_iteration(phi, omega, x, relaxation));
+        }
+        workgroupBarrier();
+        if (x.x + x.y) % 2 == 1 {
+            textureStore(phi, x, jacobi_iteration(phi, omega, x, relaxation));
+        }
     }
 
     // debug
