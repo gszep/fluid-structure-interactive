@@ -19,14 +19,13 @@ fn main(input: Input) -> Output {
 
     // vorticity map
     let omega = textureLoad(omega, x);
-    // output.color.g = 5 * max(0, omega.r);
-    // output.color.r = 5 * max(0, -omega.r);
+    output.color.g = 5 * max(0, omega.r);
+    output.color.r = 5 * max(0, -omega.r);
 
     // stream function map
-    let phi = textureLoad(phi, x);
+    // let phi = textureLoad(phi, x);
     // output.color.b = abs(phi.r);
 
-    output.color.b = textureLoad(debug, x).r;
-    output.color.a = 1.0;
+    output.color.a = 1;//textureLoad(debug, x).r;
     return output;
 }

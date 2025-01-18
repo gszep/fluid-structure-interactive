@@ -30,10 +30,11 @@ async function index(): Promise<void> {
 	const STREAMFUNCTION = 1;
 	const DEBUG = 3;
 
-	const textures = setupTextures(device, [VORTICITY, STREAMFUNCTION, DEBUG], {
-		width: 128,
-		height: 128,
-	});
+	const textures = setupTextures(
+		device,
+		[VORTICITY, STREAMFUNCTION, DEBUG],
+		canvas.size
+	);
 
 	const WORKGROUP_COUNT: [number, number] = [
 		Math.ceil(textures.size.width / WORKGROUP_SIZE),
