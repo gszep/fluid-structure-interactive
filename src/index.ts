@@ -11,7 +11,7 @@ import cellVertexShader from "./shaders/cell.vert.wgsl";
 import cellFragmentShader from "./shaders/cell.frag.wgsl";
 import timestepComputeShader from "./shaders/timestep.comp.wgsl";
 
-const WORKGROUP_SIZE = 8;
+const WORKGROUP_SIZE = 16;
 const UPDATE_INTERVAL = 1;
 let frame_index = 0;
 
@@ -30,11 +30,10 @@ async function index(): Promise<void> {
 	const STREAMFUNCTION = 1;
 	const DEBUG = 3;
 
-	const textures = setupTextures(
-		device,
-		[VORTICITY, STREAMFUNCTION, DEBUG],
-		canvas.size
-	);
+	const textures = setupTextures(device, [VORTICITY, STREAMFUNCTION, DEBUG], {
+		width: 128,
+		height: 128,
+	});
 
 	const WORKGROUP_COUNT: [number, number] = [
 		Math.ceil(textures.size.width / WORKGROUP_SIZE),

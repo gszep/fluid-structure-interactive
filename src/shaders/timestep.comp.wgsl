@@ -1,4 +1,4 @@
-struct Input {
+struct Invocation {
   @builtin(workgroup_id) workGroupID: vec3<u32>,
   @builtin(local_invocation_id) localInvocationID: vec3<u32>,
   @builtin(global_invocation_id) globalInvocationID: vec3<u32>,
@@ -82,13 +82,58 @@ fn interpolate_value(F: texture_storage_2d<FORMAT, read_write>, x: vec2<f32>) ->
     );
 }
 
-@compute @workgroup_size(WORKGROUP_SIZE, WORKGROUP_SIZE)
-fn main(input: Input) {
+var<workgroup> cached_value: array<array<array<vec4<f32>, WORKGROUP_SIZE+2>, WORKGROUP_SIZE+2>, 2>;
+fn load_cache(id: Invocation, idx: u32, F: texture_storage_2d<FORMAT, read_write>) {
+    let global = vec2<i32>(id.globalInvocationID.xy);
+    let local = id.localInvocationID.xy + 1;
 
-    let x = vec2<i32>(input.globalInvocationID.xy);
+    const loweidx = 0;
+    const uppeidx = WORKGROUP_SIZE + 1;
+
+    // load the tile and nearest neighbours into shared memory
+    cached_value[idx][local.x][local.y] = value(F, global);
+
+    // edge neighbours
+    if local.x == 1 {
+        cached_value[idx][loweidx][local.y] = value(F, global - dx);
+    }
+    if local.x == WORKGROUP_SIZE {
+        cached_value[idx][uppeidx][local.y] = value(F, global + dx);
+    }
+    if local.y == 1 {
+        cached_value[idx][local.x][loweidx] = value(F, global - dy);
+    }
+    if local.y == WORKGROUP_SIZE {
+        cached_value[idx][local.x][uppeidx] = value(F, global + dy);
+    }
+
+    // corner neighbours
+    if local.x == 1 && local.y == 1 {
+        cached_value[idx][loweidx][loweidx] = value(F, global - dx - dy);
+    }
+    if local.x == WORKGROUP_SIZE && local.y == 1 {
+        cached_value[idx][uppeidx][loweidx] = value(F, global + dx - dy);
+    }
+    if local.x == 1 && local.y == WORKGROUP_SIZE {
+        cached_value[idx][loweidx][uppeidx] = value(F, global - dx + dy);
+    }
+    if local.x == WORKGROUP_SIZE && local.y == WORKGROUP_SIZE {
+        cached_value[idx][uppeidx][uppeidx] = value(F, global + dx + dy);
+    }
+}
+
+@compute @workgroup_size(WORKGROUP_SIZE, WORKGROUP_SIZE)
+fn main(id: Invocation) {
+
+    load_cache(id, VORTICITY, omega);
+    load_cache(id, STREAMFUNCTION, phi);
+    workgroupBarrier();
+
+    let global = vec2<i32>(id.globalInvocationID.xy);
+    let local = id.localInvocationID.xy + 1;
 
     // brush interaction
-    let distance = vec2<f32>(x) - interaction.position;
+    let distance = vec2<f32>(global) - interaction.position;
     let norm = dot(distance, distance);
 
     var brush = 0.0;
@@ -97,22 +142,22 @@ fn main(input: Input) {
     }
 
     // vorticity timestep
-    textureStore(omega, x, advected_value(omega, x, 0.01) + laplacian(omega, x) * 0.001 + brush);
+    textureStore(omega, global, advected_value(omega, global, 0.01) + laplacian(omega, global) * 0.001 + brush);
 
     // solve poisson equation for stream function
     const relaxation = 1.5;
     for (var i = 0; i < 4; i = i + 1) {
         workgroupBarrier();
-        if (x.x + x.y) % 2 == 0 {
-            textureStore(phi, x, jacobi_iteration(phi, omega, x, relaxation));
+        if (global.x + global.y) % 2 == 0 {
+            textureStore(phi, global, jacobi_iteration(phi, omega, global, relaxation));
         }
         workgroupBarrier();
-        if (x.x + x.y) % 2 == 1 {
-            textureStore(phi, x, jacobi_iteration(phi, omega, x, relaxation));
+        if (global.x + global.y) % 2 == 1 {
+            textureStore(phi, global, jacobi_iteration(phi, omega, global, relaxation));
         }
     }
 
     // debug
-    let error = abs(value(omega, x) + laplacian(phi, x));
-    textureStore(debug, x, error);
+    let error = abs(value(omega, global) + laplacian(phi, global));
+    textureStore(debug, global, error);
 }
