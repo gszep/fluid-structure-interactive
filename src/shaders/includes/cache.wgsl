@@ -6,7 +6,7 @@ struct Index {
 const size = vec2<u32>(WIDTH, HEIGHT);
 const CACHE_SIZE = TILE_SIZE * WORKGROUP_SIZE;
 
-var<workgroup> cache: array<array<array<f32, CACHE_SIZE>, CACHE_SIZE>, 2>;
+var<workgroup> cache: array<array<array<f32, CACHE_SIZE>, CACHE_SIZE>, 4>;
 const DISPATCH_SIZE = (CACHE_SIZE - 2 * HALO_SIZE);
 
 fn update_cache(id: Invocation, idx: u32, F: texture_storage_2d<r32float, read_write>) {

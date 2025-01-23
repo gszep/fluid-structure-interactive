@@ -17,8 +17,13 @@ const dy = vec2<u32>(0, 1);
 
 @group(GROUP_INDEX) @binding(VORTICITY) var omega: texture_storage_2d<FORMAT, read_write>;
 @group(GROUP_INDEX) @binding(STREAMFUNCTION) var phi: texture_storage_2d<FORMAT, read_write>;
-@group(GROUP_INDEX) @binding(DEBUG) var debug: texture_storage_2d<FORMAT, read_write>;
+@group(GROUP_INDEX) @binding(XMAP) var eta_x: texture_storage_2d<FORMAT, read_write>;
+@group(GROUP_INDEX) @binding(YMAP) var eta_y: texture_storage_2d<FORMAT, read_write>;
 @group(GROUP_INDEX) @binding(INTERACTION) var<uniform> interaction: Interaction;
+
+fn get_reference_map(x: vec2<u32>) -> vec2<f32> {
+    return vec2<f32>(cached_value(XMAP, x).x, cached_value(YMAP, x).x);
+}
 
 fn laplacian(F: u32, x: vec2<u32>) -> vec4<f32> {
     return cached_value(F, x + dx) + cached_value(F, x - dx) + cached_value(F, x + dy) + cached_value(F, x - dy) - 4 * cached_value(F, x);
@@ -46,7 +51,15 @@ fn curl(F: u32, x: vec2<u32>) -> vec2<f32> {
     let u = (cached_value(F, x + dy) - cached_value(F, x - dy)) / 2;
     let v = (cached_value(F, x - dx) - cached_value(F, x + dx)) / 2;
 
-    return vec2<f32>(u.x, v.x);
+    let fluid_velocity = vec2<f32>(u.x, v.x);
+    let solid_velocity = vec2<f32>(1, 0);
+    let eta = get_reference_map(x);
+
+    let norm = sqrt(dot(eta, eta));
+
+    let w = (tanh((norm - 0.5) / 0.02) + 1) / 2 ;
+
+    return fluid_velocity * w + solid_velocity * (1 - w);
 }
 
 fn jacobi_iteration(F: u32, G: u32, x: vec2<u32>, relaxation: f32) -> vec4<f32> {
@@ -85,6 +98,8 @@ fn main(id: Invocation) {
     // vorticity timestep
     update_cache(id, VORTICITY, omega);
     update_cache(id, STREAMFUNCTION, phi);
+    update_cache(id, XMAP, eta_x);
+    update_cache(id, YMAP, eta_y);
     workgroupBarrier();
 
     for (var tile_x = 0u; tile_x < TILE_SIZE; tile_x++) {
@@ -103,7 +118,7 @@ fn main(id: Invocation) {
                 }
 
                 // advection + diffusion
-                let omega_update = advected_value(VORTICITY, STREAMFUNCTION, index.local, 0.1) + laplacian(VORTICITY, index.local) * 0.01 + brush;
+                let omega_update = advected_value(VORTICITY, STREAMFUNCTION, index.local, 1) + brush;
                 textureStore(omega, index.global, omega_update);
             }
         }
@@ -112,9 +127,25 @@ fn main(id: Invocation) {
     update_cache(id, VORTICITY, omega);
     workgroupBarrier();
 
+    for (var tile_x = 0u; tile_x < TILE_SIZE; tile_x++) {
+        for (var tile_y = 0u; tile_y < TILE_SIZE; tile_y++) {
+
+            let index = get_index(id, tile_x, tile_y);
+            if check_bounds(index, bounds) {
+
+                // reference map advection
+                let eta_x_update = advected_value(XMAP, STREAMFUNCTION, index.local, 0.1);
+                textureStore(eta_x, index.global, eta_x_update);
+
+                let eta_y_update = advected_value(YMAP, STREAMFUNCTION, index.local, 0.1);
+                textureStore(eta_y, index.global, eta_y_update);
+            }
+        }
+    }
+
     // solve poisson equation for stream function
     const relaxation = 1.0;
-    for (var n = 0u; n < 10u; n++) {
+    for (var n = 0u; n < 100u; n++) {
 
         update_cache(id, STREAMFUNCTION, phi);
         workgroupBarrier();

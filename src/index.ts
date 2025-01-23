@@ -29,13 +29,46 @@ async function index(): Promise<void> {
 
 	const VORTICITY = 0;
 	const STREAMFUNCTION = 1;
-	const DEBUG = 3;
+	const XMAP = 2;
+	const YMAP = 3;
+
+	const xmap = new Array(canvas.size.height);
+	for (let i = 0; i < canvas.size.height; i++) {
+		xmap[i] = [];
+
+		for (let j = 0; j < canvas.size.width; j++) {
+			xmap[i].push((2 * j) / canvas.size.width - 1);
+		}
+	}
+
+	const ymap = new Array(canvas.size.height);
+	for (let i = 0; i < canvas.size.height; i++) {
+		ymap[i] = [];
+
+		for (let j = 0; j < canvas.size.width; j++) {
+			ymap[i].push((2 * i) / canvas.size.height - 1);
+		}
+	}
 
 	const textures = setupTextures(
 		device,
-		[VORTICITY, STREAMFUNCTION, DEBUG],
+		[VORTICITY, STREAMFUNCTION, XMAP, YMAP],
+		{ [XMAP]: xmap, [YMAP]: ymap },
 		canvas.size
 	);
+
+	// const referencemap = textures.textures[REFERENCEMAP];
+	// const array = new Float32Array(initial_map.flat());
+	// device.queue.writeTexture(
+	// 	{ referencemap },
+	// 	/*data=*/ array,
+	// 	/*dataLayout=*/ {
+	// 		offset: 0,
+	// 		bytesPerRow: textures.size.width * array.BYTES_PER_ELEMENT,
+	// 		rowsPerImage: textures.size.height,
+	// 	},
+	// 	/*size=*/ textures.size
+	// );
 
 	const HALO_SIZE = 1;
 	const TILE_SIZE = 2;
@@ -49,7 +82,7 @@ async function index(): Promise<void> {
 	];
 
 	// setup interactions
-	const INTERACTION = 2;
+	const INTERACTION = 4;
 	const interactions = setupInteractions(
 		device,
 		canvas.context.canvas,
@@ -76,18 +109,26 @@ async function index(): Promise<void> {
 				},
 			},
 			{
-				binding: INTERACTION,
-				visibility: GPUShaderStage.COMPUTE,
-				buffer: {
-					type: interactions.type,
-				},
-			},
-			{
-				binding: DEBUG,
+				binding: XMAP,
 				visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE,
 				storageTexture: {
 					access: "read-write",
 					format: textures.format.storage,
+				},
+			},
+			{
+				binding: YMAP,
+				visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE,
+				storageTexture: {
+					access: "read-write",
+					format: textures.format.storage,
+				},
+			},
+			{
+				binding: INTERACTION,
+				visibility: GPUShaderStage.COMPUTE,
+				buffer: {
+					type: interactions.type,
 				},
 			},
 		],
@@ -106,14 +147,18 @@ async function index(): Promise<void> {
 				resource: textures.textures[STREAMFUNCTION].createView(),
 			},
 			{
+				binding: XMAP,
+				resource: textures.textures[XMAP].createView(),
+			},
+			{
+				binding: YMAP,
+				resource: textures.textures[YMAP].createView(),
+			},
+			{
 				binding: INTERACTION,
 				resource: {
 					buffer: interactions.buffer,
 				},
-			},
-			{
-				binding: DEBUG,
-				resource: textures.textures[DEBUG].createView(),
 			},
 		],
 	});
@@ -139,7 +184,8 @@ async function index(): Promise<void> {
 						GROUP_INDEX: GROUP_INDEX,
 						VORTICITY: VORTICITY,
 						STREAMFUNCTION: STREAMFUNCTION,
-						DEBUG: DEBUG,
+						XMAP: XMAP,
+						YMAP: YMAP,
 						INTERACTION: INTERACTION,
 						FORMAT: textures.format.storage,
 						WIDTH: textures.size.width,
@@ -182,7 +228,8 @@ async function index(): Promise<void> {
 					FORMAT: textures.format.storage,
 					VORTICITY: VORTICITY,
 					STREAMFUNCTION: STREAMFUNCTION,
-					DEBUG: DEBUG,
+					XMAP: XMAP,
+					YMAP: YMAP,
 					VERTEX_INDEX: VERTEX_INDEX,
 					RENDER_INDEX: RENDER_INDEX,
 					WIDTH: textures.size.width,
