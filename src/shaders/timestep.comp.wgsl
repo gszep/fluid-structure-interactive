@@ -1,7 +1,10 @@
+// cpu-side code uses setValues during shader construction to set static values
+// such as WORKGROUP_SIZE, TILE_SIZE GROUP_INDEX and other names in ALL CAPS
+// Code under the src/shaders/includes director is prepended to this shader
+
 struct Invocation {
   @builtin(workgroup_id) workGroupID: vec3<u32>,
   @builtin(local_invocation_id) localInvocationID: vec3<u32>,
-  @builtin(global_invocation_id) globalInvocationID: vec3<u32>,
 };
 
 struct Interaction {
@@ -15,10 +18,10 @@ const dy = vec2<u32>(0, 1);
 @group(GROUP_INDEX) @binding(VORTICITY) var omega: texture_storage_2d<FORMAT, read_write>;
 @group(GROUP_INDEX) @binding(STREAMFUNCTION) var phi: texture_storage_2d<FORMAT, read_write>;
 @group(GROUP_INDEX) @binding(DEBUG) var debug: texture_storage_2d<FORMAT, read_write>;
-@group(GROUP_INDEX) @binding(INTERACTION_BINDING) var<uniform> interaction: Interaction;
+@group(GROUP_INDEX) @binding(INTERACTION) var<uniform> interaction: Interaction;
 
 fn laplacian(F: u32, x: vec2<u32>) -> vec4<f32> {
-    return  cached_value(F, x + dx) + cached_value(F, x - dx) + cached_value(F, x + dy) + cached_value(F, x - dy) - 4 * cached_value(F, x);
+    return cached_value(F, x + dx) + cached_value(F, x - dx) + cached_value(F, x + dy) + cached_value(F, x - dy) - 4 * cached_value(F, x);
 }
 
 fn curl(F: u32, x: vec2<u32>) -> vec2<f32> {
@@ -50,8 +53,8 @@ fn jacobi_iteration(F: u32, G: u32, x: vec2<u32>, relaxation: f32) -> vec4<f32> 
     return (1 - relaxation) * cached_value(F, x) + (relaxation / 4) * (cached_value(F, x + dx) + cached_value(F, x - dx) + cached_value(F, x + dy) + cached_value(F, x - dy) + cached_value(G, x));
 }
 
-fn advected_value(F: u32, x: vec2<u32>, dt: f32) -> vec4<f32> {
-    let y = vec2<f32>(x) - curl(STREAMFUNCTION, x) * dt;
+fn advected_value(F: u32, G: u32, x: vec2<u32>, dt: f32) -> vec4<f32> {
+    let y = vec2<f32>(x) - curl(G, x) * dt;
     return interpolate_value(F, y);
 }
 
@@ -75,94 +78,73 @@ fn interpolate_value(F: u32, x: vec2<f32>) -> vec4<f32> {
     );
 }
 
-var<workgroup> cache: array<array<array<vec4<f32>, WORKGROUP_SIZE+2>, WORKGROUP_SIZE+2>, 2>;
-fn load_cache(id: Invocation, idx: u32, F: texture_storage_2d<FORMAT, read_write>) {
-    let global = vec2<i32>(id.globalInvocationID.xy);
-    let local = id.localInvocationID.xy + 1;
-
-    const loweidx = 0;
-    const uppeidx = WORKGROUP_SIZE + 1;
-
-    const dx = vec2<i32>(1, 0);
-    const dy = vec2<i32>(0, 1);
-
-    // load the tile and nearest neighbours into shared memory
-    cache[idx][local.x][local.y] = load_value(F, global);
-
-    // edge neighbours
-    if local.x == (loweidx + 1) {
-        cache[idx][loweidx][local.y] = load_value(F, global - dx);
-    }
-    if local.x == (uppeidx - 1) {
-        cache[idx][uppeidx][local.y] = load_value(F, global + dx);
-    }
-    if local.y == (loweidx + 1) {
-        cache[idx][local.x][loweidx] = load_value(F, global - dy);
-    }
-    if local.y == (uppeidx - 1) {
-        cache[idx][local.x][uppeidx] = load_value(F, global + dy);
-    }
-
-    // corner neighbours
-    if local.x == (loweidx + 1) && local.y == (loweidx + 1) {
-        cache[idx][loweidx][loweidx] = load_value(F, global - dx - dy);
-    }
-    if local.x == (uppeidx - 1) && local.y == (loweidx + 1) {
-        cache[idx][uppeidx][loweidx] = load_value(F, global + dx - dy);
-    }
-    if local.x == (loweidx + 1) && local.y == (uppeidx - 1) {
-        cache[idx][loweidx][uppeidx] = load_value(F, global - dx + dy);
-    }
-    if local.x == (uppeidx - 1) && local.y == (uppeidx - 1) {
-        cache[idx][uppeidx][uppeidx] = load_value(F, global + dx + dy);
-    }
-
-    workgroupBarrier();
-}
-
-fn cached_value(idx: u32, x: vec2<u32>) -> vec4<f32> {
-    return cache[idx][x.x + 1][x.y + 1];
-}
-
-fn load_value(F: texture_storage_2d<FORMAT, read_write>, x: vec2<i32>) -> vec4<f32> {
-    const size: vec2<i32> = vec2<i32>(WIDTH, HEIGHT);
-
-    let y = x + size; // ensure positive coordinates
-    return textureLoad(F, y % size);  // periodic boundary conditions
-}
-
 @compute @workgroup_size(WORKGROUP_SIZE, WORKGROUP_SIZE)
 fn main(id: Invocation) {
-    let global = id.globalInvocationID.xy;
-    let local = id.localInvocationID.xy;
+    let bounds = get_bounds(id);
 
-    // brush interaction
-    let distance = vec2<f32>(global) - interaction.position;
-    let norm = dot(distance, distance);
+    // vorticity timestep
+    update_cache(id, VORTICITY, omega);
+    update_cache(id, STREAMFUNCTION, phi);
+    workgroupBarrier();
 
-    var brush = 0.0;
-    if sqrt(norm) < abs(interaction.size) {
-        brush += 0.1 * sign(interaction.size) * exp(- norm / abs(interaction.size));
+    for (var tile_x = 0u; tile_x < TILE_SIZE; tile_x++) {
+        for (var tile_y = 0u; tile_y < TILE_SIZE; tile_y++) {
+
+            let index = get_index(id, tile_x, tile_y);
+            if check_bounds(index, bounds) {
+
+                // brush interaction
+                let distance = vec2<f32>(index.global) - interaction.position;
+                let norm = dot(distance, distance);
+
+                var brush = 0.0;
+                if sqrt(norm) < abs(interaction.size) {
+                    brush += 0.1 * sign(interaction.size) * exp(- norm / abs(interaction.size));
+                }
+
+                // advection + diffusion
+                let omega_update = advected_value(VORTICITY, STREAMFUNCTION, index.local, 0.1) + laplacian(VORTICITY, index.local) * 0.01 + brush;
+                textureStore(omega, index.global, omega_update);
+            }
+        }
     }
 
-    load_cache(id, VORTICITY, omega);
-    load_cache(id, STREAMFUNCTION, phi);
-
-    // vorticity timestep;
-    textureStore(omega, global, advected_value(VORTICITY, local, 0.0) + laplacian(VORTICITY, local) * 0.1 + brush);
-    load_cache(id, VORTICITY, omega);
+    update_cache(id, VORTICITY, omega);
+    workgroupBarrier();
 
     // solve poisson equation for stream function
-    const relaxation = 1.0;
-    for (var i = 0; i < 100; i = i + 1) {
-        load_cache(id, STREAMFUNCTION, phi);
-        textureStore(phi, global, jacobi_iteration(STREAMFUNCTION, VORTICITY, local, relaxation));
+    const relaxation = 0.7;
+    for (var n = 0u; n < 100u; n++) {
+
+        update_cache(id, STREAMFUNCTION, phi);
+        workgroupBarrier();
+
+        for (var tile_x = 0u; tile_x < TILE_SIZE; tile_x++) {
+            for (var tile_y = 0u; tile_y < TILE_SIZE; tile_y++) {
+
+                let index = get_index(id, tile_x, tile_y);
+                if check_bounds(index, bounds) {
+
+                    let phi_update = jacobi_iteration(STREAMFUNCTION, VORTICITY, index.local, relaxation);
+                    textureStore(phi, index.global, phi_update);
+                }
+            }
+        }
     }
 
-    // debug
-    load_cache(id, VORTICITY, omega);
-    load_cache(id, STREAMFUNCTION, phi);
+    // update_cache(id, STREAMFUNCTION, phi);
+    // workgroupBarrier();
 
-    let error = abs(cached_value(VORTICITY, local) + laplacian(STREAMFUNCTION, local));
-    textureStore(debug, global, error);
+    // // debug
+    // for (var tile_x = 0u; tile_x < TILE_SIZE; tile_x++) {
+    //     for (var tile_y = 0u; tile_y < TILE_SIZE; tile_y++) {
+
+    //         let index = get_index(id, tile_x, tile_y);
+    //         if check_bounds(index, bounds) {
+
+    //             let error = abs(cached_value(VORTICITY, index.local) + laplacian(STREAMFUNCTION, index.local));
+    //             textureStore(debug, index.global, error);
+    //         }
+    //     }
+    // }
 }
