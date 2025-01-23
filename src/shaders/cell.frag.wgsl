@@ -23,9 +23,11 @@ fn main(input: Input) -> Output {
     output.color.r = 5 * max(0, -omega.r);
 
     // stream function map
-    // let phi = textureLoad(phi, x);
+    let phi = textureLoad(phi, x);
     // output.color.b = abs(phi.r);
 
-    output.color.a = 1;//textureLoad(debug, x).r;
+    // debug map
+    // let debug = textureLoad(debug, x);
+    output.color.a = 1;
     return output;
 }

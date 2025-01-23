@@ -6,12 +6,13 @@ import {
 	setupInteractions,
 	setValues,
 } from "./utils";
+import cacheUtils from "./shaders/includes/cache.wgsl";
 
 import cellVertexShader from "./shaders/cell.vert.wgsl";
 import cellFragmentShader from "./shaders/cell.frag.wgsl";
 import timestepComputeShader from "./shaders/timestep.comp.wgsl";
 
-const WORKGROUP_SIZE = 8;
+const WORKGROUP_SIZE = 16;
 const UPDATE_INTERVAL = 1;
 let frame_index = 0;
 
@@ -42,7 +43,7 @@ async function index(): Promise<void> {
 	];
 
 	// setup interactions
-	const INTERACTION_BINDING = 2;
+	const INTERACTION = 2;
 	const interactions = setupInteractions(
 		device,
 		canvas.context.canvas,
@@ -69,7 +70,7 @@ async function index(): Promise<void> {
 				},
 			},
 			{
-				binding: INTERACTION_BINDING,
+				binding: INTERACTION,
 				visibility: GPUShaderStage.COMPUTE,
 				buffer: {
 					type: interactions.type,
@@ -99,7 +100,7 @@ async function index(): Promise<void> {
 				resource: textures.textures[STREAMFUNCTION].createView(),
 			},
 			{
-				binding: INTERACTION_BINDING,
+				binding: INTERACTION,
 				resource: {
 					buffer: interactions.buffer,
 				},
@@ -123,17 +124,21 @@ async function index(): Promise<void> {
 		compute: {
 			module: device.createShaderModule({
 				label: "timestepComputeShader",
-				code: setValues(timestepComputeShader, {
-					WORKGROUP_SIZE: WORKGROUP_SIZE,
-					GROUP_INDEX: GROUP_INDEX,
-					VORTICITY: VORTICITY,
-					STREAMFUNCTION: STREAMFUNCTION,
-					DEBUG: DEBUG,
-					INTERACTION_BINDING: INTERACTION_BINDING,
-					FORMAT: textures.format.storage,
-					WIDTH: textures.size.width,
-					HEIGHT: textures.size.height,
-				}),
+				code: setValues(
+					timestepComputeShader,
+					{
+						WORKGROUP_SIZE: WORKGROUP_SIZE,
+						GROUP_INDEX: GROUP_INDEX,
+						VORTICITY: VORTICITY,
+						STREAMFUNCTION: STREAMFUNCTION,
+						DEBUG: DEBUG,
+						INTERACTION: INTERACTION,
+						FORMAT: textures.format.storage,
+						WIDTH: textures.size.width,
+						HEIGHT: textures.size.height,
+					},
+					[cacheUtils]
+				),
 			}),
 		},
 	});
