@@ -37,9 +37,15 @@ async function index(): Promise<void> {
 		canvas.size
 	);
 
+	const HALO_SIZE = 1;
+	const TILE_SIZE = 2;
+
+	const CACHE_SIZE = TILE_SIZE * WORKGROUP_SIZE;
+	const DISPATCH_SIZE = CACHE_SIZE - 2 * HALO_SIZE;
+
 	const WORKGROUP_COUNT: [number, number] = [
-		Math.ceil(textures.size.width / WORKGROUP_SIZE),
-		Math.ceil(textures.size.height / WORKGROUP_SIZE),
+		Math.ceil(textures.size.width / DISPATCH_SIZE),
+		Math.ceil(textures.size.height / DISPATCH_SIZE),
 	];
 
 	// setup interactions
@@ -128,6 +134,8 @@ async function index(): Promise<void> {
 					timestepComputeShader,
 					{
 						WORKGROUP_SIZE: WORKGROUP_SIZE,
+						TILE_SIZE: TILE_SIZE,
+						HALO_SIZE: HALO_SIZE,
 						GROUP_INDEX: GROUP_INDEX,
 						VORTICITY: VORTICITY,
 						STREAMFUNCTION: STREAMFUNCTION,
