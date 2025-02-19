@@ -37,10 +37,11 @@ async function index(): Promise<void> {
 	const INTERACTION = 2;
 	const CANVAS = 4;
 
-	const textures = setupTextures(device, [VORTICITY, STREAMFUNCTION, DEBUG], {
-		width: 128,
-		height: 128,
-	});
+	const textures = setupTextures(
+		device,
+		[VORTICITY, STREAMFUNCTION, DEBUG],
+		canvas.size
+	);
 
 	const WORKGROUP_SIZE = 16;
 	const DISPATCH_SIZE = 2 * WORKGROUP_SIZE - 2;

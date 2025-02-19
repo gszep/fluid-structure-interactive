@@ -97,7 +97,7 @@ fn main(id: Invocation) {
                 }
 
                 // advection + diffusion
-                let omega_update = advected_value(VORTICITY, index.local, 0.01) + laplacian(VORTICITY, index.local) * 0.01 + brush;
+                let omega_update = advected_value(VORTICITY, index.local, 0.1) + laplacian(VORTICITY, index.local) * 0.01 + brush;
                 textureStore(omega, vec2<i32>(index.global), omega_update);
             }
         }
