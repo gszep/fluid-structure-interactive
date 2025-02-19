@@ -6,7 +6,6 @@ import {
 	setupInteractions,
 	setValues,
 } from "./utils";
-import cacheUtils from "./shaders/includes/cache.wgsl";
 
 import cellVertexShader from "./shaders/cell.vert.wgsl";
 import cellFragmentShader from "./shaders/cell.frag.wgsl";
@@ -27,17 +26,18 @@ async function index(): Promise<void> {
 	const QUAD = [-1, -1, 1, -1, 1, 1, -1, -1, 1, 1, -1, 1];
 	const quad = setupVertexBuffer(device, "Quad Vertex Buffer", QUAD);
 
-	const VORTICITY = 0;
-	const STREAMFUNCTION = 1;
+	const XVELOCITY = 0;
+	const YVELOCITY = 1;
 	const XMAP = 2;
 	const YMAP = 3;
+	const VISCOSITY = 4;
 
 	const xmap = new Array(canvas.size.height);
 	for (let i = 0; i < canvas.size.height; i++) {
 		xmap[i] = [];
 
 		for (let j = 0; j < canvas.size.width; j++) {
-			xmap[i].push((2 * j) / canvas.size.width - 1);
+			xmap[i].push(j / canvas.size.width);
 		}
 	}
 
@@ -46,29 +46,16 @@ async function index(): Promise<void> {
 		ymap[i] = [];
 
 		for (let j = 0; j < canvas.size.width; j++) {
-			ymap[i].push((2 * i) / canvas.size.height - 1);
+			ymap[i].push(i / canvas.size.height);
 		}
 	}
 
 	const textures = setupTextures(
 		device,
-		[VORTICITY, STREAMFUNCTION, XMAP, YMAP],
+		[XVELOCITY, YVELOCITY, XMAP, YMAP, VISCOSITY],
 		{ [XMAP]: xmap, [YMAP]: ymap },
-		canvas.size
+		{ width: 128, height: 128 }
 	);
-
-	// const referencemap = textures.textures[REFERENCEMAP];
-	// const array = new Float32Array(initial_map.flat());
-	// device.queue.writeTexture(
-	// 	{ referencemap },
-	// 	/*data=*/ array,
-	// 	/*dataLayout=*/ {
-	// 		offset: 0,
-	// 		bytesPerRow: textures.size.width * array.BYTES_PER_ELEMENT,
-	// 		rowsPerImage: textures.size.height,
-	// 	},
-	// 	/*size=*/ textures.size
-	// );
 
 	const HALO_SIZE = 1;
 	const TILE_SIZE = 2;
@@ -82,7 +69,7 @@ async function index(): Promise<void> {
 	];
 
 	// setup interactions
-	const INTERACTION = 4;
+	const INTERACTION = 5;
 	const interactions = setupInteractions(
 		device,
 		canvas.context.canvas,
@@ -93,7 +80,7 @@ async function index(): Promise<void> {
 		label: "bindGroupLayout",
 		entries: [
 			{
-				binding: VORTICITY,
+				binding: XVELOCITY,
 				visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE,
 				storageTexture: {
 					access: "read-write",
@@ -101,7 +88,7 @@ async function index(): Promise<void> {
 				},
 			},
 			{
-				binding: STREAMFUNCTION,
+				binding: YVELOCITY,
 				visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE,
 				storageTexture: {
 					access: "read-write",
@@ -131,6 +118,14 @@ async function index(): Promise<void> {
 					type: interactions.type,
 				},
 			},
+			{
+				binding: VISCOSITY,
+				visibility: GPUShaderStage.COMPUTE,
+				storageTexture: {
+					access: "read-write",
+					format: textures.format.storage,
+				},
+			},
 		],
 	});
 
@@ -139,12 +134,12 @@ async function index(): Promise<void> {
 		layout: bindGroupLayout,
 		entries: [
 			{
-				binding: VORTICITY,
-				resource: textures.textures[VORTICITY].createView(),
+				binding: XVELOCITY,
+				resource: textures.textures[XVELOCITY].createView(),
 			},
 			{
-				binding: STREAMFUNCTION,
-				resource: textures.textures[STREAMFUNCTION].createView(),
+				binding: YVELOCITY,
+				resource: textures.textures[YVELOCITY].createView(),
 			},
 			{
 				binding: XMAP,
@@ -153,6 +148,10 @@ async function index(): Promise<void> {
 			{
 				binding: YMAP,
 				resource: textures.textures[YMAP].createView(),
+			},
+			{
+				binding: VISCOSITY,
+				resource: textures.textures[VISCOSITY].createView(),
 			},
 			{
 				binding: INTERACTION,
@@ -175,24 +174,20 @@ async function index(): Promise<void> {
 		compute: {
 			module: device.createShaderModule({
 				label: "timestepComputeShader",
-				code: setValues(
-					timestepComputeShader,
-					{
-						WORKGROUP_SIZE: WORKGROUP_SIZE,
-						TILE_SIZE: TILE_SIZE,
-						HALO_SIZE: HALO_SIZE,
-						GROUP_INDEX: GROUP_INDEX,
-						VORTICITY: VORTICITY,
-						STREAMFUNCTION: STREAMFUNCTION,
-						XMAP: XMAP,
-						YMAP: YMAP,
-						INTERACTION: INTERACTION,
-						FORMAT: textures.format.storage,
-						WIDTH: textures.size.width,
-						HEIGHT: textures.size.height,
-					},
-					[cacheUtils]
-				),
+				code: setValues(timestepComputeShader, {
+					WORKGROUP_SIZE: WORKGROUP_SIZE,
+					TILE_SIZE: TILE_SIZE,
+					HALO_SIZE: HALO_SIZE,
+					GROUP_INDEX: GROUP_INDEX,
+					XVELOCITY: XVELOCITY,
+					YVELOCITY: YVELOCITY,
+					XMAP: XMAP,
+					YMAP: YMAP,
+					INTERACTION: INTERACTION,
+					FORMAT: textures.format.storage,
+					WIDTH: textures.size.width,
+					HEIGHT: textures.size.height,
+				}),
 			}),
 		},
 	});
@@ -226,8 +221,8 @@ async function index(): Promise<void> {
 				code: setValues(cellFragmentShader, {
 					GROUP_INDEX: GROUP_INDEX,
 					FORMAT: textures.format.storage,
-					VORTICITY: VORTICITY,
-					STREAMFUNCTION: STREAMFUNCTION,
+					XVELOCITY: XVELOCITY,
+					YVELOCITY: YVELOCITY,
 					XMAP: XMAP,
 					YMAP: YMAP,
 					VERTEX_INDEX: VERTEX_INDEX,
