@@ -6,15 +6,23 @@ function throwDetectionError(error: string): never {
 }
 
 async function requestDevice(
-	options: GPURequestAdapterOptions = { powerPreference: "high-performance" },
-	requiredFeatures: GPUFeatureName[] = []
+	options: GPURequestAdapterOptions = {
+		powerPreference: "high-performance",
+	},
+	requiredFeatures: GPUFeatureName[] = [],
+	requiredLimits: Record<string, undefined | number> = {
+		maxStorageTexturesPerShaderStage: 8,
+	}
 ): Promise<GPUDevice> {
 	if (!navigator.gpu) throwDetectionError("WebGPU NOT Supported");
 
 	const adapter = await navigator.gpu.requestAdapter(options);
 	if (!adapter) throwDetectionError("No GPU adapter found");
 
-	return adapter.requestDevice({ requiredFeatures: requiredFeatures });
+	return adapter.requestDevice({
+		requiredFeatures: requiredFeatures,
+		requiredLimits: requiredLimits,
+	});
 }
 
 function configureCanvas(
@@ -75,6 +83,7 @@ function setupVertexBuffer(
 function setupTextures(
 	device: GPUDevice,
 	bindings: number[],
+	data: { [key: number]: number[] },
 	size: { width: number; height: number },
 	format: {
 		storage: GPUTextureFormat;
@@ -89,16 +98,7 @@ function setupTextures(
 	};
 	size: { width: number; height: number };
 } {
-	const textureData = new Array(size.width * size.height);
 	const CHANNELS = channelCount(format.storage);
-
-	for (let i = 0; i < size.width * size.height; i++) {
-		textureData[i] = [];
-
-		for (let j = 0; j < CHANNELS; j++) {
-			textureData[i].push(Math.random() > 1 / 2 ? 1 : -1);
-		}
-	}
 
 	const textures: { [key: number]: GPUTexture } = {};
 	bindings.forEach((key) => {
@@ -110,10 +110,23 @@ function setupTextures(
 		});
 	});
 
-	const array = new Float32Array(textureData.flat());
-	Object.values(textures).forEach((texture) => {
+	Object.keys(textures).forEach((key) => {
+		const random = new Array(size.width * size.height);
+		for (let i = 0; i < size.width * size.height; i++) {
+			random[i] = [];
+
+			for (let j = 0; j < CHANNELS; j++) {
+				random[i].push(2 * Math.random() - 1);
+			}
+		}
+
+		const array =
+			key in data
+				? new Float32Array(data[parseInt(key)].flat())
+				: new Float32Array(random.flat());
+
 		device.queue.writeTexture(
-			{ texture },
+			{ texture: textures[parseInt(key)] },
 			/*data=*/ array,
 			/*dataLayout=*/ {
 				offset: 0,

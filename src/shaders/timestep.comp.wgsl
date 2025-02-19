@@ -19,23 +19,6 @@ fn laplacian(F: u32, x: vec2<u32>) -> vec4<f32> {
 }
 
 fn curl(F: u32, x: vec2<u32>) -> vec2<f32> {
-    // curl of a scalar field yields a vector defined as (u,v) := (dF/dy, -dF/dx)
-    // we approximate the derivatives using central differences with a staggered grid
-    // where scalar field F is defined at the center and vector components (u,v) are
-    // defined parallel to the edges of the cell.
-    //
-    //              |   F+dy  |      
-    //              |         |    
-    //       ———————|——— u1 ——|———————
-    //              |         |
-    //        F-dx  v0   F   v1   F+dx
-    //              |         |
-    //       ———————|—— u0 ———|———————
-    //              |         |
-    //              |   F-dy  |    
-    //
-    // the resulting vector field is defined at the center.
-    // Bi-linear interpolation is used to approximate.
 
     let u = (cached_value(F, x + dy) - cached_value(F, x - dy)) / 2.0;
     let v = (cached_value(F, x - dx) - cached_value(F, x + dx)) / 2.0;

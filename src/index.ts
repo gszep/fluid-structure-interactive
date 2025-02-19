@@ -40,6 +40,7 @@ async function index(): Promise<void> {
 	const textures = setupTextures(
 		device,
 		[VORTICITY, STREAMFUNCTION, DEBUG],
+		{},
 		canvas.size
 	);
 
