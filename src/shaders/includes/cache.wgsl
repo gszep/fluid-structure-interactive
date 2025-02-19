@@ -38,7 +38,7 @@ fn cached_value(idx: u32, x: vec2<u32>) -> vec4<f32> {
 
 fn load_value(F: texture_storage_2d<r32float, read_write>, x: vec2<u32>) -> vec4<f32> {
     let y = x + canvas.size; // ensure positive coordinates
-    return textureLoad(F, y % canvas.size);  // periodic boundary conditions
+    return textureLoad(F, vec2<i32>(y % (canvas.size)));  // periodic boundary conditions
 }
 
 fn get_bounds(id: Invocation) -> vec4<u32> {

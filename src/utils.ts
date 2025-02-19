@@ -124,7 +124,7 @@ function setupTextures(
 		);
 	});
 
-	let canvas = new Float32Array([size.width, size.height]);
+	let canvas = new Uint32Array([size.width, size.height]);
 	const canvasBuffer = device.createBuffer({
 		label: "Canvas Buffer",
 		size: canvas.byteLength,

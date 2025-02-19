@@ -9,7 +9,7 @@ struct Output {
 };
 
 struct Canvas {
-    size: vec2<f32>,
+    size: vec2<u32>,
 };
 
 @group(GROUP_INDEX) @binding(VORTICITY) var omega: texture_storage_2d<r32float, read_write>;
@@ -20,7 +20,7 @@ struct Canvas {
 @fragment
 fn main(input: Input) -> Output {
     var output: Output;
-    let x = vec2<i32>((1.0 + input.coordinate) / 2.0 * canvas.size);
+    let x = vec2<i32>((1.0 + input.coordinate) / 2.0 * vec2<f32>(canvas.size));
 
     // vorticity map
     let omega = textureLoad(omega, x);

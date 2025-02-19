@@ -47,8 +47,8 @@ fn jacobi_iteration(F: u32, G: u32, x: vec2<u32>, relaxation: f32) -> vec4<f32> 
     return (1.0 - relaxation) * cached_value(F, x) + (relaxation / 4.0) * (cached_value(F, x + dx) + cached_value(F, x - dx) + cached_value(F, x + dy) + cached_value(F, x - dy) + cached_value(G, x));
 }
 
-fn advected_value(F: u32, G: u32, x: vec2<u32>, dt: f32) -> vec4<f32> {
-    let y = vec2<f32>(x) - curl(G, x) * dt;
+fn advected_value(F: u32, x: vec2<u32>, dt: f32) -> vec4<f32> {
+    let y = vec2<f32>(x) - curl(STREAMFUNCTION, x) * dt;
     return interpolate_value(F, y);
 }
 
@@ -97,7 +97,7 @@ fn main(id: Invocation) {
                 }
 
                 // advection + diffusion
-                let omega_update = advected_value(VORTICITY, STREAMFUNCTION, index.local, 0.0) + laplacian(VORTICITY, index.local) * 0.1 + brush;
+                let omega_update = advected_value(VORTICITY, index.local, 0.01) + laplacian(VORTICITY, index.local) * 0.01 + brush;
                 textureStore(omega, vec2<i32>(index.global), omega_update);
             }
         }
@@ -108,7 +108,7 @@ fn main(id: Invocation) {
 
     // solve poisson equation for stream function
     const relaxation = 1.0;
-    for (var n = 0u; n < 1u; n++) {
+    for (var n = 0; n < 500; n++) {
 
         update_cache(id, STREAMFUNCTION, phi);
         workgroupBarrier();
