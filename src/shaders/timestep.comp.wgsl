@@ -1,27 +1,21 @@
-// cpu-side code uses setValues during shader construction to set static values
-// such as WORKGROUP_SIZE, TILE_SIZE GROUP_INDEX and other names in ALL CAPS
-// Code under the src/shaders/includes director is prepended to this shader
-
-struct Invocation {
-  @builtin(workgroup_id) workGroupID: vec3<u32>,
-  @builtin(local_invocation_id) localInvocationID: vec3<u32>,
-};
+#import includes::bindings
+#import includes::cache
 
 struct Interaction {
     position: vec2<f32>,
     size: f32,
 };
 
-const dx = vec2<u32>(1, 0);
-const dy = vec2<u32>(0, 1);
+const dx = vec2<u32>(1u, 0u);
+const dy = vec2<u32>(0u, 1u);
 
-@group(GROUP_INDEX) @binding(VORTICITY) var omega: texture_storage_2d<FORMAT, read_write>;
-@group(GROUP_INDEX) @binding(STREAMFUNCTION) var phi: texture_storage_2d<FORMAT, read_write>;
-@group(GROUP_INDEX) @binding(DEBUG) var debug: texture_storage_2d<FORMAT, read_write>;
+@group(GROUP_INDEX) @binding(VORTICITY) var omega: texture_storage_2d<r32float, read_write>;
+@group(GROUP_INDEX) @binding(STREAMFUNCTION) var phi: texture_storage_2d<r32float, read_write>;
+@group(GROUP_INDEX) @binding(DEBUG) var debug: texture_storage_2d<r32float, read_write>;
 @group(GROUP_INDEX) @binding(INTERACTION) var<uniform> interaction: Interaction;
 
 fn laplacian(F: u32, x: vec2<u32>) -> vec4<f32> {
-    return cached_value(F, x + dx) + cached_value(F, x - dx) + cached_value(F, x + dy) + cached_value(F, x - dy) - 4 * cached_value(F, x);
+    return cached_value(F, x + dx) + cached_value(F, x - dx) + cached_value(F, x + dy) + cached_value(F, x - dy) - 4.0 * cached_value(F, x);
 }
 
 fn curl(F: u32, x: vec2<u32>) -> vec2<f32> {
@@ -43,14 +37,14 @@ fn curl(F: u32, x: vec2<u32>) -> vec2<f32> {
     // the resulting vector field is defined at the center.
     // Bi-linear interpolation is used to approximate.
 
-    let u = (cached_value(F, x + dy) - cached_value(F, x - dy)) / 2;
-    let v = (cached_value(F, x - dx) - cached_value(F, x + dx)) / 2;
+    let u = (cached_value(F, x + dy) - cached_value(F, x - dy)) / 2.0;
+    let v = (cached_value(F, x - dx) - cached_value(F, x + dx)) / 2.0;
 
     return vec2<f32>(u.x, v.x);
 }
 
 fn jacobi_iteration(F: u32, G: u32, x: vec2<u32>, relaxation: f32) -> vec4<f32> {
-    return (1 - relaxation) * cached_value(F, x) + (relaxation / 4) * (cached_value(F, x + dx) + cached_value(F, x - dx) + cached_value(F, x + dy) + cached_value(F, x - dy) + cached_value(G, x));
+    return (1.0 - relaxation) * cached_value(F, x) + (relaxation / 4.0) * (cached_value(F, x + dx) + cached_value(F, x - dx) + cached_value(F, x + dy) + cached_value(F, x - dy) + cached_value(G, x));
 }
 
 fn advected_value(F: u32, G: u32, x: vec2<u32>, dt: f32) -> vec4<f32> {
@@ -103,8 +97,8 @@ fn main(id: Invocation) {
                 }
 
                 // advection + diffusion
-                let omega_update = advected_value(VORTICITY, STREAMFUNCTION, index.local, 0.1) + laplacian(VORTICITY, index.local) * 0.01 + brush;
-                textureStore(omega, index.global, omega_update);
+                let omega_update = advected_value(VORTICITY, STREAMFUNCTION, index.local, 0.0) + laplacian(VORTICITY, index.local) * 0.1 + brush;
+                textureStore(omega, vec2<i32>(index.global), omega_update);
             }
         }
     }
@@ -114,7 +108,7 @@ fn main(id: Invocation) {
 
     // solve poisson equation for stream function
     const relaxation = 1.0;
-    for (var n = 0u; n < 10u; n++) {
+    for (var n = 0u; n < 1u; n++) {
 
         update_cache(id, STREAMFUNCTION, phi);
         workgroupBarrier();
@@ -126,7 +120,7 @@ fn main(id: Invocation) {
                 if check_bounds(index, bounds) {
 
                     let phi_update = jacobi_iteration(STREAMFUNCTION, VORTICITY, index.local, relaxation);
-                    textureStore(phi, index.global, phi_update);
+                    textureStore(phi, vec2<i32>(index.global), phi_update);
                 }
             }
         }

@@ -1,13 +1,26 @@
+struct Invocation {
+    @builtin(workgroup_id) workGroupID: vec3<u32>,
+    @builtin(local_invocation_id) localInvocationID: vec3<u32>,
+};
+
 struct Index {
     global: vec2<u32>,
     local: vec2<u32>,
 };
 
-const size = vec2<u32>(WIDTH, HEIGHT);
-const CACHE_SIZE = TILE_SIZE * WORKGROUP_SIZE;
+struct Canvas {
+    size: vec2<u32>,
+};
 
+const TILE_SIZE = 2u;
+const WORKGROUP_SIZE = 16u;
+const HALO_SIZE = 1u;
+
+const CACHE_SIZE = TILE_SIZE * WORKGROUP_SIZE;
+const DISPATCH_SIZE = (CACHE_SIZE - 2u * HALO_SIZE);
+
+@group(GROUP_INDEX) @binding(CANVAS) var<uniform> canvas: Canvas;
 var<workgroup> cache: array<array<array<f32, CACHE_SIZE>, CACHE_SIZE>, 2>;
-const DISPATCH_SIZE = (CACHE_SIZE - 2 * HALO_SIZE);
 
 fn update_cache(id: Invocation, idx: u32, F: texture_storage_2d<r32float, read_write>) {
     for (var tile_x = 0u; tile_x < TILE_SIZE; tile_x++) {
@@ -20,18 +33,18 @@ fn update_cache(id: Invocation, idx: u32, F: texture_storage_2d<r32float, read_w
 }
 
 fn cached_value(idx: u32, x: vec2<u32>) -> vec4<f32> {
-    return vec4<f32>(cache[idx][x.x][x.y], 0.0, 0.0, 1);
+    return vec4<f32>(cache[idx][x.x][x.y], 0.0, 0.0, 1.0);
 }
 
 fn load_value(F: texture_storage_2d<r32float, read_write>, x: vec2<u32>) -> vec4<f32> {
-    let y = x + size; // ensure positive coordinates
-    return textureLoad(F, y % size);  // periodic boundary conditions
+    let y = x + canvas.size; // ensure positive coordinates
+    return textureLoad(F, y % canvas.size);  // periodic boundary conditions
 }
 
 fn get_bounds(id: Invocation) -> vec4<u32> {
     return vec4<u32>(
         DISPATCH_SIZE * id.workGroupID.xy,
-        min(size, DISPATCH_SIZE * (id.workGroupID.xy + 1))
+        min(canvas.size, DISPATCH_SIZE * (id.workGroupID.xy + 1u))
     );
 }
 
