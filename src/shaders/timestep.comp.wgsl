@@ -108,7 +108,7 @@ fn main(id: Invocation) {
 
     // solve poisson equation for stream function
     const relaxation = 1.0;
-    for (var n = 0; n < 500; n++) {
+    for (var n = 0; n < 50; n++) {
 
         update_cache(id, STREAMFUNCTION, phi);
         workgroupBarrier();
