@@ -82,6 +82,7 @@ function setupTextures(
 		storage: "r32float",
 	}
 ): {
+	canvas: GPUBuffer;
 	textures: { [key: number]: GPUTexture };
 	format: {
 		storage: GPUTextureFormat;
@@ -123,7 +124,17 @@ function setupTextures(
 		);
 	});
 
+	let canvas = new Uint32Array([size.width, size.height]);
+	const canvasBuffer = device.createBuffer({
+		label: "Canvas Buffer",
+		size: canvas.byteLength,
+		usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+	});
+
+	device.queue.writeBuffer(canvasBuffer, /*offset=*/ 0, /*data=*/ canvas);
+
 	return {
+		canvas: canvasBuffer,
 		textures: textures,
 		format: format,
 		size: size,
@@ -257,17 +268,8 @@ function channelCount(format: GPUTextureFormat): number {
 	}
 }
 
-function setValues(
-	code: string,
-	variables: Record<string, any>,
-	includes: string[] = []
-): string {
-	var code = prependIncludes(code, includes);
-	const reg = new RegExp(Object.keys(variables).join("|"), "g");
-	return code.replace(reg, (k) => variables[k].toString());
-}
-
 function prependIncludes(code: string, includes: string[]): string {
+	code = code.replace(/^#import.*/gm, "");
 	return includes.reduce((acc, include) => include + "\n" + acc, code);
 }
 
@@ -277,5 +279,5 @@ export {
 	setupVertexBuffer,
 	setupTextures,
 	setupInteractions,
-	setValues,
+	prependIncludes,
 };
