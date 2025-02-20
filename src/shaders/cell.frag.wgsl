@@ -28,8 +28,8 @@ fn main(input: Input) -> Output {
     output.color.r = 5.0 * max(0.0, -omega.r);
 
     // stream function map
-    // let phi = textureLoad(phi, x);
-    // output.color.b = abs(phi.r);
+    let phi = textureLoad(vorticity, x);
+    output.color.b = abs(phi.r);
 
     // debug map
     // let debug = textureLoad(debug, x);

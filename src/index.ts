@@ -44,7 +44,7 @@ async function index(): Promise<void> {
 		device,
 		[VORTICITY, STREAMFUNCTION, XVELOCITY, YVELOCITY, XMAP, YMAP],
 		{},
-		{ width: canvas.size.width, height: canvas.size.height }
+		canvas.size
 	);
 
 	const WORKGROUP_SIZE = 16;
@@ -121,14 +121,14 @@ async function index(): Promise<void> {
 				binding: INTERACTION,
 				visibility: GPUShaderStage.COMPUTE,
 				buffer: {
-					type: "uniform",
+					type: interactions.type,
 				},
 			},
 			{
 				binding: CANVAS,
 				visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE,
 				buffer: {
-					type: "uniform",
+					type: textures.canvas.type,
 				},
 			},
 		],
@@ -171,7 +171,7 @@ async function index(): Promise<void> {
 			{
 				binding: CANVAS,
 				resource: {
-					buffer: textures.canvas,
+					buffer: textures.canvas.buffer,
 				},
 			},
 		],
@@ -267,8 +267,8 @@ async function index(): Promise<void> {
 		computePass.setPipeline(advectionPipeline);
 		computePass.dispatchWorkgroups(...WORKGROUP_COUNT);
 
-		for (let i = 0; i < 100; i++) {
-			computePass.setPipeline(projectionPipeline);
+		computePass.setPipeline(projectionPipeline);
+		for (let i = 0; i < 10; i++) {
 			computePass.dispatchWorkgroups(...WORKGROUP_COUNT);
 		}
 

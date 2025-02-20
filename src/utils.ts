@@ -91,7 +91,11 @@ function setupTextures(
 		storage: "r32float",
 	}
 ): {
-	canvas: GPUBuffer;
+	canvas: {
+		buffer: GPUBuffer;
+		data: BufferSource | SharedArrayBuffer;
+		type: GPUBufferBindingType;
+	};
 	textures: { [key: number]: GPUTexture };
 	format: {
 		storage: GPUTextureFormat;
@@ -137,17 +141,21 @@ function setupTextures(
 		);
 	});
 
-	let canvas = new Uint32Array([size.width, size.height]);
+	let canvasData = new Uint32Array([size.width, size.height, 0, 0]);
 	const canvasBuffer = device.createBuffer({
 		label: "Canvas Buffer",
-		size: canvas.byteLength,
+		size: canvasData.byteLength,
 		usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
 	});
 
-	device.queue.writeBuffer(canvasBuffer, /*offset=*/ 0, /*data=*/ canvas);
+	device.queue.writeBuffer(canvasBuffer, /*offset=*/ 0, /*data=*/ canvasData);
 
 	return {
-		canvas: canvasBuffer,
+		canvas: {
+			buffer: canvasBuffer,
+			data: canvasData,
+			type: "uniform",
+		},
 		textures: textures,
 		format: format,
 		size: size,

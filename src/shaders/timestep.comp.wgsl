@@ -95,15 +95,36 @@ fn projection(id: Invocation) {
     update_cache(id, STREAMFUNCTION, streamfunction);
     workgroupBarrier();
 
-    const relaxation = 1.0;
+    const relaxation = 1.4;
     for (var tile_x = 0u; tile_x < TILE_SIZE; tile_x++) {
         for (var tile_y = 0u; tile_y < TILE_SIZE; tile_y++) {
 
             let index = get_index(id, tile_x, tile_y);
             if check_bounds(index, bounds) {
 
-                let streamfunction_update = jacobi_iteration(STREAMFUNCTION, VORTICITY, index.local, relaxation);
-                textureStore(streamfunction, vec2<i32>(index.global), streamfunction_update);
+                // Red update
+                if (index.local.x + index.local.y) % 2u == 0u {
+                    let streamfunction_update = jacobi_iteration(STREAMFUNCTION, VORTICITY, index.local, relaxation);
+                    textureStore(streamfunction, vec2<i32>(index.global), streamfunction_update);
+                }
+            }
+        }
+    }
+    // update_cache(id, VORTICITY, vorticity);
+    update_cache(id, STREAMFUNCTION, streamfunction);
+    workgroupBarrier();
+
+    for (var tile_x = 0u; tile_x < TILE_SIZE; tile_x++) {
+        for (var tile_y = 0u; tile_y < TILE_SIZE; tile_y++) {
+
+            let index = get_index(id, tile_x, tile_y);
+            if check_bounds(index, bounds) {
+
+                // Black update
+                if (index.local.x + index.local.y) % 2u != 0u {
+                    let streamfunction_update = jacobi_iteration(STREAMFUNCTION, VORTICITY, index.local, relaxation);
+                    textureStore(streamfunction, vec2<i32>(index.global), streamfunction_update);
+                }
             }
         }
     }

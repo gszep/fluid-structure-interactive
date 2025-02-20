@@ -10,6 +10,7 @@ struct Index {
 
 struct Canvas {
     size: vec2<u32>,
+    frame_index: u32,
 };
 
 const TILE_SIZE = 2u;
