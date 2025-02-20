@@ -183,17 +183,26 @@ async function index(): Promise<void> {
 	});
 
 	// compile shaders
-	const computePipeline = device.createComputePipeline({
-		label: "computePipeline",
+	const timestepShaderModule = device.createShaderModule({
+		label: "timestepComputeShader",
+		code: prependIncludes(timestepComputeShader, [bindings, cacheUtils]),
+	});
+
+	const advectionPipeline = device.createComputePipeline({
+		label: "advectionPipeline",
 		layout: pipelineLayout,
 		compute: {
-			module: device.createShaderModule({
-				label: "timestepComputeShader",
-				code: prependIncludes(timestepComputeShader, [
-					bindings,
-					cacheUtils,
-				]),
-			}),
+			entryPoint: "advection",
+			module: timestepShaderModule,
+		},
+	});
+
+	const projectionPipeline = device.createComputePipeline({
+		label: "projectionPipeline",
+		layout: pipelineLayout,
+		compute: {
+			entryPoint: "projection",
+			module: timestepShaderModule,
 		},
 	});
 
@@ -248,16 +257,21 @@ async function index(): Promise<void> {
 		// compute pass
 		const computePass = command.beginComputePass();
 
-		computePass.setPipeline(computePipeline);
 		computePass.setBindGroup(GROUP_INDEX, bindGroup);
-
 		device.queue.writeBuffer(
 			interactions.buffer,
 			/*offset=*/ 0,
 			/*data=*/ interactions.data
 		);
 
+		computePass.setPipeline(advectionPipeline);
 		computePass.dispatchWorkgroups(...WORKGROUP_COUNT);
+
+		for (let i = 0; i < 100; i++) {
+			computePass.setPipeline(projectionPipeline);
+			computePass.dispatchWorkgroups(...WORKGROUP_COUNT);
+		}
+
 		computePass.end();
 
 		// render pass
@@ -267,9 +281,10 @@ async function index(): Promise<void> {
 		renderPassDescriptor.colorAttachments[RENDER_INDEX].view = view;
 		const renderPass = command.beginRenderPass(renderPassDescriptor);
 
-		renderPass.setPipeline(renderPipeline);
 		renderPass.setBindGroup(GROUP_INDEX, bindGroup);
 		renderPass.setVertexBuffer(VERTEX_INDEX, quad.vertexBuffer);
+
+		renderPass.setPipeline(renderPipeline);
 		renderPass.draw(quad.vertexCount);
 		renderPass.end();
 

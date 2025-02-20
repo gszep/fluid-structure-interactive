@@ -57,10 +57,9 @@ fn interpolate_value(F: u32, x: vec2<f32>) -> vec4<f32> {
 }
 
 @compute @workgroup_size(WORKGROUP_SIZE, WORKGROUP_SIZE)
-fn main(id: Invocation) {
+fn advection(id: Invocation) {
     let bounds = get_bounds(id);
 
-    // vorticity timestep
     update_cache(id, VORTICITY, vorticity);
     update_cache(id, STREAMFUNCTION, streamfunction);
     workgroupBarrier();
@@ -86,43 +85,26 @@ fn main(id: Invocation) {
             }
         }
     }
+}
+
+@compute @workgroup_size(WORKGROUP_SIZE, WORKGROUP_SIZE)
+fn projection(id: Invocation) {
+    let bounds = get_bounds(id);
 
     update_cache(id, VORTICITY, vorticity);
+    update_cache(id, STREAMFUNCTION, streamfunction);
     workgroupBarrier();
 
-    // solve poisson equation for stream function
     const relaxation = 1.0;
-    for (var n = 0; n < 50; n++) {
+    for (var tile_x = 0u; tile_x < TILE_SIZE; tile_x++) {
+        for (var tile_y = 0u; tile_y < TILE_SIZE; tile_y++) {
 
-        update_cache(id, STREAMFUNCTION, streamfunction);
-        workgroupBarrier();
+            let index = get_index(id, tile_x, tile_y);
+            if check_bounds(index, bounds) {
 
-        for (var tile_x = 0u; tile_x < TILE_SIZE; tile_x++) {
-            for (var tile_y = 0u; tile_y < TILE_SIZE; tile_y++) {
-
-                let index = get_index(id, tile_x, tile_y);
-                if check_bounds(index, bounds) {
-
-                    let streamfunction_update = jacobi_iteration(STREAMFUNCTION, VORTICITY, index.local, relaxation);
-                    textureStore(streamfunction, vec2<i32>(index.global), streamfunction_update);
-                }
+                let streamfunction_update = jacobi_iteration(STREAMFUNCTION, VORTICITY, index.local, relaxation);
+                textureStore(streamfunction, vec2<i32>(index.global), streamfunction_update);
             }
         }
     }
-
-    // update_cache(id, STREAMFUNCTION, phi);
-    // workgroupBarrier();
-
-    // // debug
-    // for (var tile_x = 0u; tile_x < TILE_SIZE; tile_x++) {
-    //     for (var tile_y = 0u; tile_y < TILE_SIZE; tile_y++) {
-
-    //         let index = get_index(id, tile_x, tile_y);
-    //         if check_bounds(index, bounds) {
-
-    //             let error = abs(cached_value(VORTICITY, index.local) + laplacian(STREAMFUNCTION, index.local));
-    //             textureStore(debug, index.global, error);
-    //         }
-    //     }
-    // }
 }
