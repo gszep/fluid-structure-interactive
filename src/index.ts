@@ -32,20 +32,27 @@ async function index(): Promise<void> {
 
 	const VORTICITY = 0;
 	const STREAMFUNCTION = 1;
-	const DEBUG = 3;
+	const XVELOCITY = 2;
+	const YVELOCITY = 3;
+	const XMAP = 4;
+	const YMAP = 5;
 
-	const INTERACTION = 2;
-	const CANVAS = 4;
+	const INTERACTION = 6;
+	const CANVAS = 7;
 
 	const textures = setupTextures(
 		device,
-		[VORTICITY, STREAMFUNCTION, DEBUG],
+		[VORTICITY, STREAMFUNCTION, XVELOCITY, YVELOCITY, XMAP, YMAP],
 		{},
-		canvas.size
+		{ width: canvas.size.width, height: canvas.size.height }
 	);
 
 	const WORKGROUP_SIZE = 16;
-	const DISPATCH_SIZE = 2 * WORKGROUP_SIZE - 2;
+	const TILE_SIZE = 2;
+	const HALO_SIZE = 1;
+
+	const CACHE_SIZE = TILE_SIZE * WORKGROUP_SIZE;
+	const DISPATCH_SIZE = CACHE_SIZE - 2 * HALO_SIZE;
 
 	const WORKGROUP_COUNT: [number, number] = [
 		Math.ceil(textures.size.width / DISPATCH_SIZE),
@@ -79,7 +86,31 @@ async function index(): Promise<void> {
 				},
 			},
 			{
-				binding: DEBUG,
+				binding: XVELOCITY,
+				visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE,
+				storageTexture: {
+					access: "read-write",
+					format: textures.format.storage,
+				},
+			},
+			{
+				binding: YVELOCITY,
+				visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE,
+				storageTexture: {
+					access: "read-write",
+					format: textures.format.storage,
+				},
+			},
+			{
+				binding: XMAP,
+				visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE,
+				storageTexture: {
+					access: "read-write",
+					format: textures.format.storage,
+				},
+			},
+			{
+				binding: YMAP,
 				visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE,
 				storageTexture: {
 					access: "read-write",
@@ -116,8 +147,20 @@ async function index(): Promise<void> {
 				resource: textures.textures[STREAMFUNCTION].createView(),
 			},
 			{
-				binding: DEBUG,
-				resource: textures.textures[DEBUG].createView(),
+				binding: XVELOCITY,
+				resource: textures.textures[XVELOCITY].createView(),
+			},
+			{
+				binding: YVELOCITY,
+				resource: textures.textures[YVELOCITY].createView(),
+			},
+			{
+				binding: XMAP,
+				resource: textures.textures[XMAP].createView(),
+			},
+			{
+				binding: YMAP,
+				resource: textures.textures[YMAP].createView(),
 			},
 			{
 				binding: INTERACTION,
