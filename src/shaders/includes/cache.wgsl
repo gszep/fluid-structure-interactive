@@ -20,7 +20,7 @@ const CACHE_SIZE = TILE_SIZE * WORKGROUP_SIZE;
 const DISPATCH_SIZE = (CACHE_SIZE - 2u * HALO_SIZE);
 
 @group(GROUP_INDEX) @binding(CANVAS) var<uniform> canvas: Canvas;
-var<workgroup> cache: array<array<array<f32, CACHE_SIZE>, CACHE_SIZE>, 2>;
+var<workgroup> cache: array<array<array<f32, CACHE_SIZE>, CACHE_SIZE>, 4>;
 
 fn update_cache(id: Invocation, idx: u32, F: texture_storage_2d<r32float, read_write>) {
     for (var tile_x = 0u; tile_x < TILE_SIZE; tile_x++) {
