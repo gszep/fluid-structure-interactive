@@ -1,6 +1,7 @@
 #import includes::bindings
 #import includes::cache
 
+const EPS = 1e-37;
 struct Interaction {
     position: vec2<f32>,
     size: f32,
@@ -40,23 +41,28 @@ fn get_vorticity_interpolate(index: IndexFloat) -> vec4<f32> {
 }
 
 fn diffuse_vorticity(x: Index) -> vec4<f32> {
-    return get_vorticity(add(x, dx)) + get_vorticity(sub(x, dx)) + get_vorticity(add(x, dy)) + get_vorticity(sub(x, dy)) - 4.0 * get_vorticity(x);
+    let laplacian = 2.0 * (get_vorticity(add(x, dx)) + get_vorticity(sub(x, dx)) + get_vorticity(add(x, dy)) + get_vorticity(add(x, dx + dy))) + get_vorticity(add(x, dx - dy)) + get_vorticity(add(x, dy - dx)) + get_vorticity(sub(x, dx + dy)) - 12.0 * get_vorticity(x);
+    return laplacian / 4.0;
 }
 
-fn velocity(x: Index) -> vec2<f32> {
+fn velocity(x: Index, max_norm: f32) -> vec2<f32> {
 
-    let u = (get_streamfunction(add(x, dy)) - get_streamfunction(sub(x, dy))) / 2.0;
-    let v = (get_streamfunction(sub(x, dx)) - get_streamfunction(add(x, dx))) / 2.0;
+    let vx = (get_streamfunction(add(x, dy)) - get_streamfunction(sub(x, dy))) / 2.0;
+    let vy = (get_streamfunction(sub(x, dx)) - get_streamfunction(add(x, dx))) / 2.0;
 
-    return vec2<f32>(u.x, v.x);
+    let v = vec2<f32>(vx.x, vy.x);
+    let norm = length(v);
+
+    return (v / max(norm, EPS)) * min(norm, max_norm);
 }
 
 fn jacobi_iteration(x: Index, relaxation: f32) -> vec4<f32> {
     return (1.0 - relaxation) * get_streamfunction(x) + (relaxation / 4.0) * (get_streamfunction(add(x, dx)) + get_streamfunction(sub(x, dx)) + get_streamfunction(add(x, dy)) + get_streamfunction(sub(x, dy)) + get_vorticity(x));
 }
 
-fn advect_vorticity(x: Index, dt: f32) -> vec4<f32> {
-    let y = subf(indexf(x), velocity(x) * dt);
+fn advect_vorticity(x: Index) -> vec4<f32> {
+    const max_norm = f32(HALO_SIZE);
+    let y = subf(indexf(x), velocity(x, max_norm));
     return get_vorticity_interpolate(y);
 }
 
@@ -104,7 +110,7 @@ fn advection(id: Invocation) {
             let index = get_index(id, tile_x, tile_y);
             if check_bounds(index) {
 
-                let vorticity_update = advect_vorticity(index, 0.1) + diffuse_vorticity(index) * 0.01;
+                let vorticity_update = advect_vorticity(index) + diffuse_vorticity(index) * 0.01;
                 textureStore(vorticity, vec2<i32>(index.global), vorticity_update);
             }
         }

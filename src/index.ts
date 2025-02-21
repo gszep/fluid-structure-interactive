@@ -291,7 +291,7 @@ async function index(): Promise<void> {
 
 		// project
 		computePass.setPipeline(projectionPipeline);
-		for (let i = 0; i < 20; i++) {
+		for (let i = 0; i < 50; i++) {
 			computePass.dispatchWorkgroups(...WORKGROUP_COUNT);
 		}
 
