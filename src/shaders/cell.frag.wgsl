@@ -13,8 +13,6 @@ struct Canvas {
 };
 
 @group(GROUP_INDEX) @binding(VORTICITY) var vorticity: texture_storage_2d<r32float, read_write>;
-@group(GROUP_INDEX) @binding(XVELOCITY) var xvelocity: texture_storage_2d<r32float, read_write>;
-@group(GROUP_INDEX) @binding(YVELOCITY) var yvelocity: texture_storage_2d<r32float, read_write>;
 @group(GROUP_INDEX) @binding(CANVAS) var<uniform> canvas: Canvas;
 
 @fragment
@@ -27,12 +25,6 @@ fn main(input: Input) -> Output {
     output.color.g = 5.0 * max(0.0, omega.r);
     output.color.r = 5.0 * max(0.0, -omega.r);
 
-    // stream function map
-    let phi = textureLoad(vorticity, x);
-    output.color.b = abs(phi.r);
-
-    // debug map
-    // let debug = textureLoad(debug, x);
     output.color.a = 1.0;
     return output;
 }

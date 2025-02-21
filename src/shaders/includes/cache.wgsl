@@ -8,10 +8,38 @@ struct Index {
     local: vec2<u32>,
 };
 
+struct IndexFloat {
+    global: vec2<f32>,
+    local: vec2<f32>,
+};
+
 struct Canvas {
     size: vec2<u32>,
     frame_index: u32,
 };
+
+fn indexf(index: Index) -> IndexFloat {
+    return IndexFloat(vec2<f32>(index.global), vec2<f32>(index.local));
+}
+
+fn add(x: Index, y: vec2<u32>) -> Index {
+    return Index(x.global + y, x.local + y);
+}
+
+fn addf(x: IndexFloat, y: vec2<f32>) -> IndexFloat {
+    return IndexFloat(x.global + y, x.local + y);
+}
+
+fn sub(x: Index, y: vec2<u32>) -> Index {
+    return Index(x.global - y, x.local - y);
+}
+
+fn subf(x: IndexFloat, y: vec2<f32>) -> IndexFloat {
+    return IndexFloat(x.global - y, x.local - y);
+}
+
+const dx = vec2<u32>(1u, 0u);
+const dy = vec2<u32>(0u, 1u);
 
 const TILE_SIZE = 2u;
 const WORKGROUP_SIZE = 16u;
@@ -42,15 +70,8 @@ fn load_value(F: texture_storage_2d<r32float, read_write>, x: vec2<u32>) -> vec4
     return textureLoad(F, vec2<i32>(y % canvas.size));  // periodic boundary conditions
 }
 
-fn get_bounds(id: Invocation) -> vec4<u32> {
-    return vec4<u32>(
-        DISPATCH_SIZE * id.workGroupID.xy,
-        min(canvas.size, DISPATCH_SIZE * (id.workGroupID.xy + 1u))
-    );
-}
-
-fn check_bounds(index: Index, bounds: vec4<u32>) -> bool {
-    return all(index.global >= bounds.xy) && all(index.global < bounds.zw);
+fn check_bounds(index: Index) -> bool {
+    return (0u < index.local.x) && (index.local.x <= DISPATCH_SIZE) && (0u < index.local.y) && (index.local.y <= DISPATCH_SIZE);
 }
 
 fn get_index(id: Invocation, tile_x: u32, tile_y: u32) -> Index {

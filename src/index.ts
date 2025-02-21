@@ -40,10 +40,27 @@ async function index(): Promise<void> {
 	const INTERACTION = 6;
 	const CANVAS = 7;
 
+	const xmap = new Array(canvas.size.height);
+	for (let i = 0; i < canvas.size.height; i++) {
+		xmap[i] = [];
+
+		for (let j = 0; j < canvas.size.width; j++) {
+			xmap[i].push(j / canvas.size.width);
+		}
+	}
+
+	const ymap = new Array(canvas.size.height);
+	for (let i = 0; i < canvas.size.height; i++) {
+		ymap[i] = [];
+
+		for (let j = 0; j < canvas.size.width; j++) {
+			ymap[i].push(i / canvas.size.height);
+		}
+	}
 	const textures = setupTextures(
 		device,
 		[VORTICITY, STREAMFUNCTION, XVELOCITY, YVELOCITY, XMAP, YMAP],
-		{},
+		{ [XVELOCITY]: xmap, [YVELOCITY]: ymap },
 		canvas.size
 	);
 
@@ -188,6 +205,15 @@ async function index(): Promise<void> {
 		code: prependIncludes(timestepComputeShader, [bindings, cacheUtils]),
 	});
 
+	const interactionPipeline = device.createComputePipeline({
+		label: "interactionPipeline",
+		layout: pipelineLayout,
+		compute: {
+			entryPoint: "interact",
+			module: timestepShaderModule,
+		},
+	});
+
 	const advectionPipeline = device.createComputePipeline({
 		label: "advectionPipeline",
 		layout: pipelineLayout,
@@ -256,21 +282,22 @@ async function index(): Promise<void> {
 
 		// compute pass
 		const computePass = command.beginComputePass();
-
 		computePass.setBindGroup(GROUP_INDEX, bindGroup);
-		device.queue.writeBuffer(
-			interactions.buffer,
-			/*offset=*/ 0,
-			/*data=*/ interactions.data
-		);
 
-		computePass.setPipeline(advectionPipeline);
+		// interact
+		computePass.setPipeline(interactionPipeline);
+		device.queue.writeBuffer(interactions.buffer, 0, interactions.data);
 		computePass.dispatchWorkgroups(...WORKGROUP_COUNT);
 
+		// project
 		computePass.setPipeline(projectionPipeline);
-		for (let i = 0; i < 10; i++) {
+		for (let i = 0; i < 20; i++) {
 			computePass.dispatchWorkgroups(...WORKGROUP_COUNT);
 		}
+
+		// advect
+		computePass.setPipeline(advectionPipeline);
+		computePass.dispatchWorkgroups(...WORKGROUP_COUNT);
 
 		computePass.end();
 
@@ -280,11 +307,11 @@ async function index(): Promise<void> {
 
 		renderPassDescriptor.colorAttachments[RENDER_INDEX].view = view;
 		const renderPass = command.beginRenderPass(renderPassDescriptor);
-
 		renderPass.setBindGroup(GROUP_INDEX, bindGroup);
-		renderPass.setVertexBuffer(VERTEX_INDEX, quad.vertexBuffer);
 
 		renderPass.setPipeline(renderPipeline);
+		renderPass.setVertexBuffer(VERTEX_INDEX, quad.vertexBuffer);
+
 		renderPass.draw(quad.vertexCount);
 		renderPass.end();
 
