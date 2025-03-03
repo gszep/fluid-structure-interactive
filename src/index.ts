@@ -64,7 +64,7 @@ async function index(): Promise<void> {
 		canvas.size
 	);
 
-	const WORKGROUP_SIZE = 16;
+	const WORKGROUP_SIZE = 8;
 	const TILE_SIZE = 2;
 	const HALO_SIZE = 1;
 

@@ -42,14 +42,14 @@ const dx = vec2<u32>(1u, 0u);
 const dy = vec2<u32>(0u, 1u);
 
 const TILE_SIZE = 2u;
-const WORKGROUP_SIZE = 16u;
+const WORKGROUP_SIZE = 8u;
 const HALO_SIZE = 1u;
 
 const CACHE_SIZE = TILE_SIZE * WORKGROUP_SIZE;
 const DISPATCH_SIZE = (CACHE_SIZE - 2u * HALO_SIZE);
 
 @group(GROUP_INDEX) @binding(CANVAS) var<uniform> canvas: Canvas;
-var<workgroup> cache: array<array<array<f32, CACHE_SIZE>, CACHE_SIZE>, 4>;
+var<workgroup> cache: array<array<array<f32, CACHE_SIZE>, CACHE_SIZE>, 16>;
 
 fn update_cache(id: Invocation, idx: u32, F: texture_storage_2d<r32float, read_write>) {
     for (var tile_x = 0u; tile_x < TILE_SIZE; tile_x++) {

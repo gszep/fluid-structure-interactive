@@ -9,6 +9,10 @@ struct Interaction {
 
 @group(GROUP_INDEX) @binding(VORTICITY) var vorticity: texture_storage_2d<r32float, read_write>;
 @group(GROUP_INDEX) @binding(STREAMFUNCTION) var streamfunction: texture_storage_2d<r32float, read_write>;
+@group(GROUP_INDEX) @binding(XVELOCITY) var xvelocity: texture_storage_2d<r32float, read_write>;
+@group(GROUP_INDEX) @binding(YVELOCITY) var yvelocity: texture_storage_2d<r32float, read_write>;
+@group(GROUP_INDEX) @binding(XMAP) var xmap: texture_storage_2d<r32float, read>;
+@group(GROUP_INDEX) @binding(YMAP) var ymap: texture_storage_2d<r32float, read>;
 @group(GROUP_INDEX) @binding(INTERACTION) var<uniform> interaction: Interaction;
 
 fn get_streamfunction(index: Index) -> vec4<f32> {
@@ -17,6 +21,14 @@ fn get_streamfunction(index: Index) -> vec4<f32> {
 
 fn get_vorticity(index: Index) -> vec4<f32> {
     return cached_value(VORTICITY, index.local);
+}
+
+fn get_velocity(index: Index) -> vec2<f32> {
+    return vec2<f32>(cached_value(XVELOCITY, index.local).r, cached_value(YVELOCITY, index.local).r);
+}
+
+fn get_reference_map(index: Index) -> vec2<f32> {
+    return vec2<f32>(cached_value(XMAP, index.local).r, cached_value(YMAP, index.local).r);
 }
 
 fn get_vorticity_interpolate(index: IndexFloat) -> vec4<f32> {
@@ -47,13 +59,27 @@ fn diffuse_vorticity(x: Index) -> vec4<f32> {
 
 fn velocity(x: Index, max_norm: f32) -> vec2<f32> {
 
-    let vx = (get_streamfunction(add(x, dy)) - get_streamfunction(sub(x, dy))) / 2.0;
-    let vy = (get_streamfunction(sub(x, dx)) - get_streamfunction(add(x, dx))) / 2.0;
-
-    let v = vec2<f32>(vx.x, vy.x);
+    let v = get_velocity(x);
     let norm = length(v);
 
     return (v / max(norm, EPS)) * min(norm, max_norm);
+}
+
+fn update_velocity(id: Invocation) {
+    for (var tile_x = 0u; tile_x < TILE_SIZE; tile_x++) {
+        for (var tile_y = 0u; tile_y < TILE_SIZE; tile_y++) {
+
+            let index = get_index(id, tile_x, tile_y);
+            if check_bounds(index) {
+
+                let xvelocity_update = (get_streamfunction(add(index, dy)) - get_streamfunction(sub(index, dy))) / 2.0;
+                let yvelocity_update = (get_streamfunction(sub(index, dx)) - get_streamfunction(add(index, dx))) / 2.0;
+
+                textureStore(xvelocity, vec2<i32>(index.global), xvelocity_update);
+                textureStore(yvelocity, vec2<i32>(index.global), yvelocity_update);
+            }
+        }
+    }
 }
 
 fn jacobi_iteration(x: Index, relaxation: f32) -> vec4<f32> {
@@ -70,7 +96,6 @@ fn advect_vorticity(x: Index) -> vec4<f32> {
 fn interact(id: Invocation) {
 
     update_cache(id, VORTICITY, vorticity);
-    update_cache(id, STREAMFUNCTION, streamfunction);
     workgroupBarrier();
 
     for (var tile_x = 0u; tile_x < TILE_SIZE; tile_x++) {
@@ -80,7 +105,7 @@ fn interact(id: Invocation) {
             if check_bounds(index) {
 
                 let x = vec2<f32>(index.global);
-                let y = interaction.position;
+                let y = interaction.position + 8.0 * sign(interaction.size) ;
 
                 let dims = vec2<f32>(canvas.size);
                 let distance = length((x - y) - dims * floor((x - y) / dims + 0.5));
@@ -101,7 +126,8 @@ fn interact(id: Invocation) {
 fn advection(id: Invocation) {
 
     update_cache(id, VORTICITY, vorticity);
-    update_cache(id, STREAMFUNCTION, streamfunction);
+    update_cache(id, XVELOCITY, xvelocity);
+    update_cache(id, YVELOCITY, yvelocity);
     workgroupBarrier();
 
     for (var tile_x = 0u; tile_x < TILE_SIZE; tile_x++) {
@@ -121,6 +147,8 @@ fn advection(id: Invocation) {
 fn projection(id: Invocation) {
 
     update_cache(id, VORTICITY, vorticity);
+    update_cache(id, XVELOCITY, xvelocity);
+    update_cache(id, YVELOCITY, yvelocity);
     update_cache(id, STREAMFUNCTION, streamfunction);
     workgroupBarrier();
 
@@ -139,7 +167,6 @@ fn projection(id: Invocation) {
             }
         }
     }
-    // update_cache(id, VORTICITY, vorticity);
     update_cache(id, STREAMFUNCTION, streamfunction);
     workgroupBarrier();
 
@@ -157,4 +184,5 @@ fn projection(id: Invocation) {
             }
         }
     }
+    update_velocity(id);
 }
