@@ -12,7 +12,7 @@ import cacheUtils from "./shaders/includes/cache.wgsl";
 
 import cellVertexShader from "./shaders/cell.vert.wgsl";
 import cellFragmentShader from "./shaders/cell.frag.wgsl";
-import timestepComputeShader from "./shaders/timestep.comp.wgsl";
+import timestepComputeShader from "./shaders/vorticity-streamfunction.comp.wgsl";
 
 const UPDATE_INTERVAL = 1;
 let frame_index = 0;
