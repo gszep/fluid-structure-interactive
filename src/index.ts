@@ -30,15 +30,15 @@ async function index(): Promise<void> {
 	const VERTEX_INDEX = 0;
 	const RENDER_INDEX = 0;
 
-	const VORTICITY = 0;
-	const STREAMFUNCTION = 1;
-	const XVELOCITY = 2;
-	const YVELOCITY = 3;
-	const XMAP = 4;
-	const YMAP = 5;
-
-	const INTERACTION = 6;
-	const CANVAS = 7;
+	const BINDINGS_TEXTURE = {
+		VORTICITY: 0,
+		STREAMFUNCTION: 1,
+		XVELOCITY: 2,
+		YVELOCITY: 3,
+		XMAP: 4,
+		YMAP: 5,
+	};
+	const BINDINGS_BUFFER = { INTERACTION: 6, CANVAS: 7 };
 
 	const xmap = new Array(canvas.size.height);
 	for (let i = 0; i < canvas.size.height; i++) {
@@ -57,11 +57,16 @@ async function index(): Promise<void> {
 			ymap[i].push(i / canvas.size.height);
 		}
 	}
+
 	const textures = setupTextures(
 		device,
-		[VORTICITY, STREAMFUNCTION, XVELOCITY, YVELOCITY, XMAP, YMAP],
-		{ [XVELOCITY]: xmap, [YVELOCITY]: ymap },
-		canvas.size
+		Object.values(BINDINGS_TEXTURE),
+		{},
+		{
+			depthOrArrayLayers: [2, 2, 2, 2, 2, 2],
+			width: canvas.size.width,
+			height: canvas.size.height,
+		}
 	);
 
 	const WORKGROUP_SIZE = 8;
@@ -86,68 +91,16 @@ async function index(): Promise<void> {
 	const bindGroupLayout = device.createBindGroupLayout({
 		label: "bindGroupLayout",
 		entries: [
-			{
-				binding: VORTICITY,
+			...Object.values(BINDINGS_TEXTURE).map((binding) => ({
+				binding: binding,
 				visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE,
-				storageTexture: {
-					access: "read-write",
-					format: textures.format.storage,
-				},
-			},
-			{
-				binding: STREAMFUNCTION,
+				storageTexture: textures.bindingLayout,
+			})),
+			...Object.values(BINDINGS_BUFFER).map((binding) => ({
+				binding: binding,
 				visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE,
-				storageTexture: {
-					access: "read-write",
-					format: textures.format.storage,
-				},
-			},
-			{
-				binding: XVELOCITY,
-				visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE,
-				storageTexture: {
-					access: "read-write",
-					format: textures.format.storage,
-				},
-			},
-			{
-				binding: YVELOCITY,
-				visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE,
-				storageTexture: {
-					access: "read-write",
-					format: textures.format.storage,
-				},
-			},
-			{
-				binding: XMAP,
-				visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE,
-				storageTexture: {
-					access: "read-write",
-					format: textures.format.storage,
-				},
-			},
-			{
-				binding: YMAP,
-				visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE,
-				storageTexture: {
-					access: "read-write",
-					format: textures.format.storage,
-				},
-			},
-			{
-				binding: INTERACTION,
-				visibility: GPUShaderStage.COMPUTE,
-				buffer: {
-					type: interactions.type,
-				},
-			},
-			{
-				binding: CANVAS,
-				visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE,
-				buffer: {
-					type: textures.canvas.type,
-				},
-			},
+				buffer: { type: "uniform" as GPUBufferBindingType },
+			})),
 		],
 	});
 
@@ -155,42 +108,19 @@ async function index(): Promise<void> {
 		label: `Bind Group`,
 		layout: bindGroupLayout,
 		entries: [
-			{
-				binding: VORTICITY,
-				resource: textures.textures[VORTICITY].createView(),
-			},
-			{
-				binding: STREAMFUNCTION,
-				resource: textures.textures[STREAMFUNCTION].createView(),
-			},
-			{
-				binding: XVELOCITY,
-				resource: textures.textures[XVELOCITY].createView(),
-			},
-			{
-				binding: YVELOCITY,
-				resource: textures.textures[YVELOCITY].createView(),
-			},
-			{
-				binding: XMAP,
-				resource: textures.textures[XMAP].createView(),
-			},
-			{
-				binding: YMAP,
-				resource: textures.textures[YMAP].createView(),
-			},
-			{
-				binding: INTERACTION,
+			...Object.values(BINDINGS_TEXTURE).map((binding) => ({
+				binding: binding,
+				resource: textures.textures[binding].createView(),
+			})),
+			...Object.values(BINDINGS_BUFFER).map((binding) => ({
+				binding: binding,
 				resource: {
-					buffer: interactions.buffer,
+					buffer:
+						binding === BINDINGS_BUFFER.INTERACTION
+							? interactions.buffer
+							: textures.canvas.buffer,
 				},
-			},
-			{
-				binding: CANVAS,
-				resource: {
-					buffer: textures.canvas.buffer,
-				},
-			},
+			})),
 		],
 	});
 

@@ -84,11 +84,10 @@ function setupTextures(
 	device: GPUDevice,
 	bindings: number[],
 	data: { [key: number]: number[] },
-	size: { width: number; height: number },
-	format: {
-		storage: GPUTextureFormat;
-	} = {
-		storage: "r32float",
+	size: {
+		depthOrArrayLayers: { [key: number]: number };
+		width: number;
+		height: number;
 	}
 ): {
 	canvas: {
@@ -97,29 +96,43 @@ function setupTextures(
 		type: GPUBufferBindingType;
 	};
 	textures: { [key: number]: GPUTexture };
-	format: {
-		storage: GPUTextureFormat;
+	bindingLayout: GPUStorageTextureBindingLayout;
+	size: {
+		depthOrArrayLayers: { [key: number]: number };
+		width: number;
+		height: number;
 	};
-	size: { width: number; height: number };
 } {
-	const CHANNELS = channelCount(format.storage);
-
+	const FORMAT = "r32float";
+	const CHANNELS = channelCount(FORMAT);
 	const textures: { [key: number]: GPUTexture } = {};
+
 	bindings.forEach((key) => {
 		textures[key] = device.createTexture({
-			label: `Texture ${key}`,
-			size: [size.width, size.height],
-			format: format.storage,
 			usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_DST,
+			format: FORMAT,
+			size: {
+				width: size.width,
+				height: size.height,
+				depthOrArrayLayers:
+					key in size.depthOrArrayLayers
+						? size.depthOrArrayLayers[key]
+						: 1,
+			},
 		});
 	});
 
 	Object.keys(textures).forEach((key) => {
 		const random = new Array(size.width * size.height);
+		const depthOrArrayLayers =
+			key in size.depthOrArrayLayers
+				? size.depthOrArrayLayers[parseInt(key)]
+				: 1;
+
 		for (let i = 0; i < size.width * size.height; i++) {
 			random[i] = [];
 
-			for (let j = 0; j < CHANNELS; j++) {
+			for (let j = 0; j < depthOrArrayLayers; j++) {
 				random[i].push(2 * Math.random() - 1);
 			}
 		}
@@ -137,7 +150,11 @@ function setupTextures(
 				bytesPerRow: size.width * array.BYTES_PER_ELEMENT * CHANNELS,
 				rowsPerImage: size.height,
 			},
-			/*size=*/ size
+			/*size=*/ {
+				width: size.width,
+				height: size.height,
+				depthOrArrayLayers: depthOrArrayLayers,
+			}
 		);
 	});
 
@@ -157,7 +174,11 @@ function setupTextures(
 			type: "uniform",
 		},
 		textures: textures,
-		format: format,
+		bindingLayout: {
+			format: FORMAT,
+			access: "read-write",
+			viewDimension: "2d-array",
+		},
 		size: size,
 	};
 }
