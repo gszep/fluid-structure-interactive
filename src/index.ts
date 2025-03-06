@@ -61,7 +61,12 @@ async function index(): Promise<void> {
 		Object.values(BINDINGS_TEXTURE),
 		{},
 		{
-			depthOrArrayLayers: {},
+			depthOrArrayLayers: {
+				[BINDINGS_TEXTURE.VORTICITY]: 1,
+				[BINDINGS_TEXTURE.STREAMFUNCTION]: 1,
+				[BINDINGS_TEXTURE.VELOCITY]: 2,
+				[BINDINGS_TEXTURE.MAP]: 2,
+			},
 			width: canvas.size.width,
 			height: canvas.size.height,
 		}
@@ -92,7 +97,7 @@ async function index(): Promise<void> {
 			...Object.values(BINDINGS_TEXTURE).map((binding) => ({
 				binding: binding,
 				visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE,
-				storageTexture: textures.bindingLayout,
+				storageTexture: textures.bindingLayout[binding],
 			})),
 			...Object.values(BINDINGS_BUFFER).map((binding) => ({
 				binding: binding,

@@ -96,7 +96,7 @@ function setupTextures(
 		type: GPUBufferBindingType;
 	};
 	textures: { [key: number]: GPUTexture };
-	bindingLayout: GPUStorageTextureBindingLayout;
+	bindingLayout: { [key: number]: GPUStorageTextureBindingLayout };
 	size: {
 		depthOrArrayLayers?: { [key: number]: number };
 		width: number;
@@ -107,6 +107,7 @@ function setupTextures(
 	const CHANNELS = channelCount(FORMAT);
 
 	const textures: { [key: number]: GPUTexture } = {};
+	const bindingLayout: { [key: number]: GPUStorageTextureBindingLayout } = {};
 	const depthOrArrayLayers = size.depthOrArrayLayers || {};
 
 	bindings.forEach((key) => {
@@ -117,7 +118,7 @@ function setupTextures(
 				width: size.width,
 				height: size.height,
 				depthOrArrayLayers:
-					key in depthOrArrayLayers ? depthOrArrayLayers[key] : 2,
+					key in depthOrArrayLayers ? depthOrArrayLayers[key] : 1,
 			},
 		});
 	});
@@ -126,6 +127,12 @@ function setupTextures(
 		const random = new Array(size.width * size.height);
 		const layers =
 			key in depthOrArrayLayers ? depthOrArrayLayers[parseInt(key)] : 1;
+
+		bindingLayout[parseInt(key)] = {
+			format: FORMAT,
+			access: "read-write",
+			viewDimension: layers > 1 ? "2d-array" : "2d",
+		};
 
 		for (let i = 0; i < size.width * size.height; i++) {
 			random[i] = [];
@@ -172,11 +179,7 @@ function setupTextures(
 			type: "uniform",
 		},
 		textures: textures,
-		bindingLayout: {
-			format: FORMAT,
-			access: "read-write",
-			viewDimension: "2d-array",
-		},
+		bindingLayout: bindingLayout,
 		size: size,
 	};
 }

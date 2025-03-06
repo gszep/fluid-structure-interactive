@@ -7,8 +7,8 @@ struct Interaction {
     size: f32,
 };
 
-@group(GROUP_INDEX) @binding(VORTICITY) var vorticity: texture_storage_2d_array<r32float, read_write>;
-@group(GROUP_INDEX) @binding(STREAMFUNCTION) var streamfunction: texture_storage_2d_array<r32float, read_write>;
+@group(GROUP_INDEX) @binding(VORTICITY) var vorticity: texture_storage_2d<r32float, read_write>;
+@group(GROUP_INDEX) @binding(STREAMFUNCTION) var streamfunction: texture_storage_2d<r32float, read_write>;
 @group(GROUP_INDEX) @binding(VELOCITY) var velocity: texture_storage_2d_array<r32float, read_write>;
 @group(GROUP_INDEX) @binding(MAP) var map: texture_storage_2d_array<r32float, read_write>;
 @group(GROUP_INDEX) @binding(INTERACTION) var<uniform> interaction: Interaction;
@@ -73,8 +73,8 @@ fn update_velocity(id: Invocation) {
                 let xvelocity_update = (get_streamfunction(add(index, dy)) - get_streamfunction(sub(index, dy))) / 2.0;
                 let yvelocity_update = (get_streamfunction(sub(index, dx)) - get_streamfunction(add(index, dx))) / 2.0;
 
-                store_value(velocity, index, 0, xvelocity_update);
-                store_value(velocity, index, 1, yvelocity_update);
+                store_component_value(velocity, index, 0, xvelocity_update);
+                store_component_value(velocity, index, 1, yvelocity_update);
             }
         }
     }
@@ -114,7 +114,7 @@ fn interact(id: Invocation) {
                 }
 
                 var vorticity_update = get_vorticity(index) + brush;
-                store_value(vorticity, index, 0, vorticity_update);
+                store_value(vorticity, index, vorticity_update);
             }
         }
     }
@@ -134,7 +134,7 @@ fn advection(id: Invocation) {
             if check_bounds(index) {
 
                 let vorticity_update = advect_vorticity(index) + diffuse_vorticity(index) * 0.01;
-                store_value(vorticity, index, 0, vorticity_update);
+                store_value(vorticity, index, vorticity_update);
             }
         }
     }
@@ -159,7 +159,7 @@ fn projection(id: Invocation) {
                 // Red update
                 if (index.local.x + index.local.y) % 2u == 0u {
                     let streamfunction_update = jacobi_iteration(index, relaxation);
-                    store_value(streamfunction, index, 0, streamfunction_update);
+                    store_value(streamfunction, index, streamfunction_update);
                 }
             }
         }
@@ -176,7 +176,7 @@ fn projection(id: Invocation) {
                 // Black update
                 if (index.local.x + index.local.y) % 2u != 0u {
                     let streamfunction_update = jacobi_iteration(index, relaxation);
-                    store_value(streamfunction, index, 0, streamfunction_update);
+                    store_value(streamfunction, index, streamfunction_update);
                 }
             }
         }

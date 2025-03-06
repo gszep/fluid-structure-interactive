@@ -12,7 +12,7 @@ struct Canvas {
     size: vec2<u32>,
 };
 
-@group(GROUP_INDEX) @binding(VORTICITY) var vorticity: texture_storage_2d_array<r32float, read_write>;
+@group(GROUP_INDEX) @binding(VORTICITY) var vorticity: texture_storage_2d<r32float, read_write>;
 @group(GROUP_INDEX) @binding(CANVAS) var<uniform> canvas: Canvas;
 
 @fragment
@@ -21,7 +21,7 @@ fn main(input: Input) -> Output {
     let x = vec2<i32>((1.0 + input.coordinate) / 2.0 * vec2<f32>(canvas.size));
 
     // vorticity map
-    let omega = textureLoad(vorticity, x, 0);
+    let omega = textureLoad(vorticity, x);
     output.color.g = 5.0 * max(0.0, omega.r);
     output.color.r = 5.0 * max(0.0, -omega.r);
 
