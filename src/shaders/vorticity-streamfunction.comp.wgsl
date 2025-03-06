@@ -13,23 +13,23 @@ struct Interaction {
 @group(GROUP_INDEX) @binding(MAP) var map: texture_storage_2d_array<r32float, read_write>;
 @group(GROUP_INDEX) @binding(INTERACTION) var<uniform> interaction: Interaction;
 
-fn get_streamfunction(index: Index) -> vec4<f32> {
-    return cached_value(STREAMFUNCTION, index.local, 0);
+fn get_streamfunction(index: Index) -> f32 {
+    return cached_value_f32(STREAMFUNCTION, index.local);
 }
 
-fn get_vorticity(index: Index) -> vec4<f32> {
-    return cached_value(VORTICITY, index.local, 0);
+fn get_vorticity(index: Index) -> f32 {
+    return cached_value_f32(VORTICITY, index.local);
 }
 
 fn get_velocity(index: Index) -> vec2<f32> {
-    return vec2<f32>(cached_value(VELOCITY, index.local, 0).r, cached_value(VELOCITY, index.local, 1).r);
+    return cached_value_vec2(VELOCITY, index.local);
 }
 
 fn get_reference_map(index: Index) -> vec2<f32> {
-    return vec2<f32>(cached_value(MAP, index.local, 0).r, cached_value(MAP, index.local, 1).r);
+    return cached_value_vec2(MAP, index.local);
 }
 
-fn get_vorticity_interpolate(index: IndexFloat) -> vec4<f32> {
+fn get_vorticity_interpolate(index: IndexFloat) -> f32 {
     let x = index.local;
 
     let fraction = fract(x);
@@ -37,20 +37,20 @@ fn get_vorticity_interpolate(index: IndexFloat) -> vec4<f32> {
 
     return mix(
         mix(
-            cached_value(VORTICITY, y, 0),
-            cached_value(VORTICITY, y + dx, 0),
+            cached_value_f32(VORTICITY, y),
+            cached_value_f32(VORTICITY, y + dx),
             fraction.x
         ),
         mix(
-            cached_value(VORTICITY, y + dy, 0),
-            cached_value(VORTICITY, y + dx + dy, 0),
+            cached_value_f32(VORTICITY, y + dy),
+            cached_value_f32(VORTICITY, y + dx + dy),
             fraction.x
         ),
         fraction.y
     );
 }
 
-fn diffuse_vorticity(x: Index) -> vec4<f32> {
+fn diffuse_vorticity(x: Index) -> f32 {
     let laplacian = 2.0 * (get_vorticity(add(x, dx)) + get_vorticity(sub(x, dx)) + get_vorticity(add(x, dy)) + get_vorticity(add(x, dx + dy))) + get_vorticity(add(x, dx - dy)) + get_vorticity(add(x, dy - dx)) + get_vorticity(sub(x, dx + dy)) - 12.0 * get_vorticity(x);
     return laplacian / 4.0;
 }
@@ -73,18 +73,18 @@ fn update_velocity(id: Invocation) {
                 let xvelocity_update = (get_streamfunction(add(index, dy)) - get_streamfunction(sub(index, dy))) / 2.0;
                 let yvelocity_update = (get_streamfunction(sub(index, dx)) - get_streamfunction(add(index, dx))) / 2.0;
 
-                textureStore(velocity, vec2<i32>(index.global), 0, xvelocity_update);
-                textureStore(velocity, vec2<i32>(index.global), 1, yvelocity_update);
+                store_value(velocity, index, 0, xvelocity_update);
+                store_value(velocity, index, 1, yvelocity_update);
             }
         }
     }
 }
 
-fn jacobi_iteration(x: Index, relaxation: f32) -> vec4<f32> {
+fn jacobi_iteration(x: Index, relaxation: f32) -> f32 {
     return (1.0 - relaxation) * get_streamfunction(x) + (relaxation / 4.0) * (get_streamfunction(add(x, dx)) + get_streamfunction(sub(x, dx)) + get_streamfunction(add(x, dy)) + get_streamfunction(sub(x, dy)) + get_vorticity(x));
 }
 
-fn advect_vorticity(x: Index) -> vec4<f32> {
+fn advect_vorticity(x: Index) -> f32 {
     const max_norm = f32(HALO_SIZE);
     let y = subf(indexf(x), get_velocity_clipped(x, max_norm));
     return get_vorticity_interpolate(y);
@@ -93,7 +93,7 @@ fn advect_vorticity(x: Index) -> vec4<f32> {
 @compute @workgroup_size(WORKGROUP_SIZE, WORKGROUP_SIZE)
 fn interact(id: Invocation) {
 
-    update_cache(id, VORTICITY, vorticity);
+    update_cache_f32(id, VORTICITY, vorticity);
     workgroupBarrier();
 
     for (var tile_x = 0u; tile_x < TILE_SIZE; tile_x++) {
@@ -114,7 +114,7 @@ fn interact(id: Invocation) {
                 }
 
                 var vorticity_update = get_vorticity(index) + brush;
-                textureStore(vorticity, vec2<i32>(index.global), 0, vorticity_update);
+                store_value(vorticity, index, 0, vorticity_update);
             }
         }
     }
@@ -123,8 +123,8 @@ fn interact(id: Invocation) {
 @compute @workgroup_size(WORKGROUP_SIZE, WORKGROUP_SIZE)
 fn advection(id: Invocation) {
 
-    update_cache(id, VORTICITY, vorticity);
-    update_cache(id, VELOCITY, velocity);
+    update_cache_f32(id, VORTICITY, vorticity);
+    update_cache_vec2(id, VELOCITY, velocity);
     workgroupBarrier();
 
     for (var tile_x = 0u; tile_x < TILE_SIZE; tile_x++) {
@@ -134,7 +134,7 @@ fn advection(id: Invocation) {
             if check_bounds(index) {
 
                 let vorticity_update = advect_vorticity(index) + diffuse_vorticity(index) * 0.01;
-                textureStore(vorticity, vec2<i32>(index.global), 0, vorticity_update);
+                store_value(vorticity, index, 0, vorticity_update);
             }
         }
     }
@@ -143,9 +143,10 @@ fn advection(id: Invocation) {
 @compute @workgroup_size(WORKGROUP_SIZE, WORKGROUP_SIZE)
 fn projection(id: Invocation) {
 
-    update_cache(id, VORTICITY, vorticity);
-    update_cache(id, VELOCITY, velocity);
-    update_cache(id, STREAMFUNCTION, streamfunction);
+    update_cache_f32(id, VORTICITY, vorticity);
+    update_cache_f32(id, STREAMFUNCTION, streamfunction);
+    update_cache_vec2(id, VELOCITY, velocity);
+
     workgroupBarrier();
 
     const relaxation = 1.4;
@@ -158,12 +159,12 @@ fn projection(id: Invocation) {
                 // Red update
                 if (index.local.x + index.local.y) % 2u == 0u {
                     let streamfunction_update = jacobi_iteration(index, relaxation);
-                    textureStore(streamfunction, vec2<i32>(index.global), 0, streamfunction_update);
+                    store_value(streamfunction, index, 0, streamfunction_update);
                 }
             }
         }
     }
-    update_cache(id, STREAMFUNCTION, streamfunction);
+    update_cache_f32(id, STREAMFUNCTION, streamfunction);
     workgroupBarrier();
 
     for (var tile_x = 0u; tile_x < TILE_SIZE; tile_x++) {
@@ -175,7 +176,7 @@ fn projection(id: Invocation) {
                 // Black update
                 if (index.local.x + index.local.y) % 2u != 0u {
                     let streamfunction_update = jacobi_iteration(index, relaxation);
-                    textureStore(streamfunction, vec2<i32>(index.global), 0, streamfunction_update);
+                    store_value(streamfunction, index, 0, streamfunction_update);
                 }
             }
         }
