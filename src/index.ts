@@ -33,12 +33,10 @@ async function index(): Promise<void> {
 	const BINDINGS_TEXTURE = {
 		VORTICITY: 0,
 		STREAMFUNCTION: 1,
-		XVELOCITY: 2,
-		YVELOCITY: 3,
-		XMAP: 4,
-		YMAP: 5,
+		VELOCITY: 2,
+		MAP: 3,
 	};
-	const BINDINGS_BUFFER = { INTERACTION: 6, CANVAS: 7 };
+	const BINDINGS_BUFFER = { INTERACTION: 4, CANVAS: 5 };
 
 	const xmap = new Array(canvas.size.height);
 	for (let i = 0; i < canvas.size.height; i++) {
@@ -63,7 +61,7 @@ async function index(): Promise<void> {
 		Object.values(BINDINGS_TEXTURE),
 		{},
 		{
-			depthOrArrayLayers: [2, 2, 2, 2, 2, 2],
+			depthOrArrayLayers: {},
 			width: canvas.size.width,
 			height: canvas.size.height,
 		}

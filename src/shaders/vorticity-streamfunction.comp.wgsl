@@ -9,26 +9,24 @@ struct Interaction {
 
 @group(GROUP_INDEX) @binding(VORTICITY) var vorticity: texture_storage_2d_array<r32float, read_write>;
 @group(GROUP_INDEX) @binding(STREAMFUNCTION) var streamfunction: texture_storage_2d_array<r32float, read_write>;
-@group(GROUP_INDEX) @binding(XVELOCITY) var xvelocity: texture_storage_2d_array<r32float, read_write>;
-@group(GROUP_INDEX) @binding(YVELOCITY) var yvelocity: texture_storage_2d_array<r32float, read_write>;
-@group(GROUP_INDEX) @binding(XMAP) var xmap: texture_storage_2d_array<r32float, read>;
-@group(GROUP_INDEX) @binding(YMAP) var ymap: texture_storage_2d_array<r32float, read>;
+@group(GROUP_INDEX) @binding(VELOCITY) var velocity: texture_storage_2d_array<r32float, read_write>;
+@group(GROUP_INDEX) @binding(MAP) var map: texture_storage_2d_array<r32float, read_write>;
 @group(GROUP_INDEX) @binding(INTERACTION) var<uniform> interaction: Interaction;
 
 fn get_streamfunction(index: Index) -> vec4<f32> {
-    return cached_value(STREAMFUNCTION, index.local);
+    return cached_value(STREAMFUNCTION, index.local, 0);
 }
 
 fn get_vorticity(index: Index) -> vec4<f32> {
-    return cached_value(VORTICITY, index.local);
+    return cached_value(VORTICITY, index.local, 0);
 }
 
 fn get_velocity(index: Index) -> vec2<f32> {
-    return vec2<f32>(cached_value(XVELOCITY, index.local).r, cached_value(YVELOCITY, index.local).r);
+    return vec2<f32>(cached_value(VELOCITY, index.local, 0).r, cached_value(VELOCITY, index.local, 1).r);
 }
 
 fn get_reference_map(index: Index) -> vec2<f32> {
-    return vec2<f32>(cached_value(XMAP, index.local).r, cached_value(YMAP, index.local).r);
+    return vec2<f32>(cached_value(MAP, index.local, 0).r, cached_value(MAP, index.local, 1).r);
 }
 
 fn get_vorticity_interpolate(index: IndexFloat) -> vec4<f32> {
@@ -39,13 +37,13 @@ fn get_vorticity_interpolate(index: IndexFloat) -> vec4<f32> {
 
     return mix(
         mix(
-            cached_value(VORTICITY, y),
-            cached_value(VORTICITY, y + dx),
+            cached_value(VORTICITY, y, 0),
+            cached_value(VORTICITY, y + dx, 0),
             fraction.x
         ),
         mix(
-            cached_value(VORTICITY, y + dy),
-            cached_value(VORTICITY, y + dx + dy),
+            cached_value(VORTICITY, y + dy, 0),
+            cached_value(VORTICITY, y + dx + dy, 0),
             fraction.x
         ),
         fraction.y
@@ -57,7 +55,7 @@ fn diffuse_vorticity(x: Index) -> vec4<f32> {
     return laplacian / 4.0;
 }
 
-fn velocity(x: Index, max_norm: f32) -> vec2<f32> {
+fn get_velocity_clipped(x: Index, max_norm: f32) -> vec2<f32> {
 
     let v = get_velocity(x);
     let norm = length(v);
@@ -75,8 +73,8 @@ fn update_velocity(id: Invocation) {
                 let xvelocity_update = (get_streamfunction(add(index, dy)) - get_streamfunction(sub(index, dy))) / 2.0;
                 let yvelocity_update = (get_streamfunction(sub(index, dx)) - get_streamfunction(add(index, dx))) / 2.0;
 
-                textureStore(xvelocity, vec2<i32>(index.global), 0, xvelocity_update);
-                textureStore(yvelocity, vec2<i32>(index.global), 0, yvelocity_update);
+                textureStore(velocity, vec2<i32>(index.global), 0, xvelocity_update);
+                textureStore(velocity, vec2<i32>(index.global), 1, yvelocity_update);
             }
         }
     }
@@ -88,7 +86,7 @@ fn jacobi_iteration(x: Index, relaxation: f32) -> vec4<f32> {
 
 fn advect_vorticity(x: Index) -> vec4<f32> {
     const max_norm = f32(HALO_SIZE);
-    let y = subf(indexf(x), velocity(x, max_norm));
+    let y = subf(indexf(x), get_velocity_clipped(x, max_norm));
     return get_vorticity_interpolate(y);
 }
 
@@ -126,8 +124,7 @@ fn interact(id: Invocation) {
 fn advection(id: Invocation) {
 
     update_cache(id, VORTICITY, vorticity);
-    update_cache(id, XVELOCITY, xvelocity);
-    update_cache(id, YVELOCITY, yvelocity);
+    update_cache(id, VELOCITY, velocity);
     workgroupBarrier();
 
     for (var tile_x = 0u; tile_x < TILE_SIZE; tile_x++) {
@@ -147,8 +144,7 @@ fn advection(id: Invocation) {
 fn projection(id: Invocation) {
 
     update_cache(id, VORTICITY, vorticity);
-    update_cache(id, XVELOCITY, xvelocity);
-    update_cache(id, YVELOCITY, yvelocity);
+    update_cache(id, VELOCITY, velocity);
     update_cache(id, STREAMFUNCTION, streamfunction);
     workgroupBarrier();
 

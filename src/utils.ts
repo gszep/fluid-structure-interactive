@@ -85,7 +85,7 @@ function setupTextures(
 	bindings: number[],
 	data: { [key: number]: number[] },
 	size: {
-		depthOrArrayLayers: { [key: number]: number };
+		depthOrArrayLayers?: { [key: number]: number };
 		width: number;
 		height: number;
 	}
@@ -98,14 +98,16 @@ function setupTextures(
 	textures: { [key: number]: GPUTexture };
 	bindingLayout: GPUStorageTextureBindingLayout;
 	size: {
-		depthOrArrayLayers: { [key: number]: number };
+		depthOrArrayLayers?: { [key: number]: number };
 		width: number;
 		height: number;
 	};
 } {
 	const FORMAT = "r32float";
 	const CHANNELS = channelCount(FORMAT);
+
 	const textures: { [key: number]: GPUTexture } = {};
+	const depthOrArrayLayers = size.depthOrArrayLayers || {};
 
 	bindings.forEach((key) => {
 		textures[key] = device.createTexture({
@@ -115,24 +117,20 @@ function setupTextures(
 				width: size.width,
 				height: size.height,
 				depthOrArrayLayers:
-					key in size.depthOrArrayLayers
-						? size.depthOrArrayLayers[key]
-						: 1,
+					key in depthOrArrayLayers ? depthOrArrayLayers[key] : 2,
 			},
 		});
 	});
 
 	Object.keys(textures).forEach((key) => {
 		const random = new Array(size.width * size.height);
-		const depthOrArrayLayers =
-			key in size.depthOrArrayLayers
-				? size.depthOrArrayLayers[parseInt(key)]
-				: 1;
+		const layers =
+			key in depthOrArrayLayers ? depthOrArrayLayers[parseInt(key)] : 1;
 
 		for (let i = 0; i < size.width * size.height; i++) {
 			random[i] = [];
 
-			for (let j = 0; j < depthOrArrayLayers; j++) {
+			for (let j = 0; j < layers; j++) {
 				random[i].push(2 * Math.random() - 1);
 			}
 		}
@@ -153,7 +151,7 @@ function setupTextures(
 			/*size=*/ {
 				width: size.width,
 				height: size.height,
-				depthOrArrayLayers: depthOrArrayLayers,
+				depthOrArrayLayers: layers,
 			}
 		);
 	});

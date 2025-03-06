@@ -49,25 +49,27 @@ const CACHE_SIZE = TILE_SIZE * WORKGROUP_SIZE;
 const DISPATCH_SIZE = (CACHE_SIZE - 2u * HALO_SIZE);
 
 @group(GROUP_INDEX) @binding(CANVAS) var<uniform> canvas: Canvas;
-var<workgroup> cache: array<array<array<f32, CACHE_SIZE>, CACHE_SIZE>, 16>;
+var<workgroup> cache: array<array<array<array<f32, CACHE_SIZE>, CACHE_SIZE>, 8>, 2>;
 
 fn update_cache(id: Invocation, idx: u32, F: texture_storage_2d_array<r32float, read_write>) {
     for (var tile_x = 0u; tile_x < TILE_SIZE; tile_x++) {
         for (var tile_y = 0u; tile_y < TILE_SIZE; tile_y++) {
             let index = get_index(id, tile_x, tile_y);
 
-            cache[idx][index.local.x][index.local.y] = load_value(F, index.global).r;
+            for (var component = 0; component < 2; component++) {
+                cache[component][idx][index.local.x][index.local.y] = load_value(F, index.global, component).r;
+            }
         }
     }
 }
 
-fn cached_value(idx: u32, x: vec2<u32>) -> vec4<f32> {
-    return vec4<f32>(cache[idx][x.x][x.y], 0.0, 0.0, 1.0);
+fn cached_value(idx: u32, x: vec2<u32>, component: i32) -> vec4<f32> {
+    return vec4<f32>(cache[component][idx][x.x][x.y], 0.0, 0.0, 1.0);
 }
 
-fn load_value(F: texture_storage_2d_array<r32float, read_write>, x: vec2<u32>) -> vec4<f32> {
+fn load_value(F: texture_storage_2d_array<r32float, read_write>, x: vec2<u32>, component: i32) -> vec4<f32> {
     let y = x + canvas.size; // ensure positive coordinates
-    return textureLoad(F, vec2<i32>(y % canvas.size), 0);  // periodic boundary conditions
+    return textureLoad(F, vec2<i32>(y % canvas.size), component);  // periodic boundary conditions
 }
 
 fn check_bounds(index: Index) -> bool {

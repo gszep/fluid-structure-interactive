@@ -4,10 +4,8 @@ const RENDER_INDEX = 0;
 
 const VORTICITY = 0u;
 const STREAMFUNCTION = 1u;
-const XVELOCITY = 2u;
-const YVELOCITY = 3u;
-const XMAP = 4u;
-const YMAP = 5u;
+const VELOCITY = 2u;
+const MAP = 3u;
 
-const INTERACTION = 6;
-const CANVAS = 7;
+const INTERACTION = 4;
+const CANVAS = 5;
