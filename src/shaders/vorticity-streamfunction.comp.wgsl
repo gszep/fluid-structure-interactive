@@ -11,6 +11,7 @@ struct Interaction {
 @group(GROUP_INDEX) @binding(STREAMFUNCTION) var streamfunction: texture_storage_2d<r32float, read_write>;
 @group(GROUP_INDEX) @binding(VELOCITY) var velocity: texture_storage_2d_array<r32float, read_write>;
 @group(GROUP_INDEX) @binding(MAP) var map: texture_storage_2d_array<r32float, read_write>;
+@group(GROUP_INDEX) @binding(DISTRIBUTION) var distribution: texture_storage_2d_array<r32float, read_write>;
 @group(GROUP_INDEX) @binding(INTERACTION) var<uniform> interaction: Interaction;
 
 fn get_streamfunction(index: Index) -> f32 {
@@ -27,6 +28,10 @@ fn get_velocity(index: Index) -> vec2<f32> {
 
 fn get_reference_map(index: Index) -> vec2<f32> {
     return cached_value_vec2(MAP, index.local);
+}
+
+fn get_distribution(index: Index) -> array<f32, 9> {
+    return cached_value_vec9(index.local);
 }
 
 fn get_vorticity_interpolate(index: IndexFloat) -> f32 {
@@ -182,4 +187,11 @@ fn projection(id: Invocation) {
         }
     }
     update_velocity(id);
+}
+
+@compute @workgroup_size(WORKGROUP_SIZE, WORKGROUP_SIZE)
+fn streaming(id: Invocation) {
+
+    update_cache_vec9(id, distribution);
+    workgroupBarrier();
 }

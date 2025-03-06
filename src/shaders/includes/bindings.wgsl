@@ -6,6 +6,7 @@ const VORTICITY = 0u;
 const STREAMFUNCTION = 1u;
 const VELOCITY = 2u;
 const MAP = 3u;
+const DISTRIBUTION = 4u;
 
-const INTERACTION = 4;
-const CANVAS = 5;
+const INTERACTION = 5;
+const CANVAS = 6;

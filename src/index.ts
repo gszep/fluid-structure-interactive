@@ -35,8 +35,9 @@ async function index(): Promise<void> {
 		STREAMFUNCTION: 1,
 		VELOCITY: 2,
 		MAP: 3,
+		DISTRIBUTION: 4,
 	};
-	const BINDINGS_BUFFER = { INTERACTION: 4, CANVAS: 5 };
+	const BINDINGS_BUFFER = { INTERACTION: 5, CANVAS: 6 };
 
 	const xmap = new Array(canvas.size.height);
 	for (let i = 0; i < canvas.size.height; i++) {
