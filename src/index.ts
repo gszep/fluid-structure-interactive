@@ -76,18 +76,15 @@ function initialVelocity(height: number, width: number) {
 			const dy = i - centerY;
 			const distance = Math.sqrt(dx * dx + dy * dy);
 
-			// // Avoid division by zero at center
-			// if (distance < 0.00000000000000001) {
-			// 	row.push([0, 0]);
-			// 	continue;
-			// }
-
 			// Create circular velocity field
-			const strength = 1.1;
-			const vx = (dy / distance) * strength;
-			const vy = (dx / distance) * strength;
+			const sigma = 50;
+			var rho = Math.exp((-distance * distance) / (2 * sigma * sigma));
 
-			row.push([-vx, vy]);
+			rho = rho * Math.exp((-(distance - 50) * (distance - 50)) / 200);
+			const vx = (dy / distance) * rho;
+			const vy = (dx / distance) * rho;
+
+			row.push([0.2, 0]);
 		}
 		velocityField.push(row);
 	}

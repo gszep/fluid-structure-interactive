@@ -41,7 +41,7 @@ fn get_distribution(index: Index) -> array<f32, 9> {
 @compute @workgroup_size(WORKGROUP_SIZE, WORKGROUP_SIZE)
 fn interact(id: Invocation) {
 
-    load_cache_f32(id, DENSITY, density);
+    load_macroscopics_cache(id);
     workgroupBarrier();
 
     for (var tile_x = 0u; tile_x < TILE_SIZE; tile_x++) {
@@ -51,18 +51,19 @@ fn interact(id: Invocation) {
             if check_bounds(index) {
 
                 let x = vec2<f32>(index.global);
-                let y = interaction.position + 8.0 * sign(interaction.size) ;
+                let y = interaction.position + sign(interaction.size) ;
 
                 let dims = vec2<f32>(canvas.size);
                 let distance = length((x - y) - dims * floor((x - y) / dims + 0.5));
 
                 var brush = 0.0;
                 if distance < abs(interaction.size) {
-                    brush += 0.1 * sign(interaction.size) * exp(- distance * distance / abs(interaction.size));
+                    brush += 0.01 * sign(interaction.size) * exp(- distance * distance / abs(interaction.size));
                 }
 
-                var density_update = get_density(index) + brush;
-                store_value(density, index, density_update);
+                var velocity_update = get_velocity(index) + brush;
+                store_component_value(velocity, index, 0, velocity_update.x);
+                store_component_value(velocity, index, 1, velocity_update.y);
             }
         }
     }
@@ -76,7 +77,7 @@ fn lattice_boltzmann(id: Invocation) {
 
     workgroupBarrier();
 
-    let omega = 0.01;
+    let relaxation_frequency = 1.0; // between 0.0 and 2.0
     for (var tile_x = 0u; tile_x < TILE_SIZE; tile_x++) {
         for (var tile_y = 0u; tile_y < TILE_SIZE; tile_y++) {
 
@@ -95,38 +96,14 @@ fn lattice_boltzmann(id: Invocation) {
                     equilibrium[i] = lattice_weight[i] * density * (1.0 + 3.0 * lattice_speed + 4.5 * lattice_speed * lattice_speed - 1.5 * speed * speed);
                 }
 
-                // collision
-                var f = get_distribution(index);
+                // collision-streaming
+                let f = get_distribution(index);
                 for (var i = 0; i < 9; i++) {
-                    f[i] = (1.0 - omega) * f[i] + omega * equilibrium[i];
-                }
-            }
-        }
-    }
 
-    load_distribution_cache(id);
-    workgroupBarrier();
+                    let distribution_update = (1.0 - relaxation_frequency) * f[i] + relaxation_frequency * equilibrium[i];
+                    let y = index.global + vec2<u32>(lattice_vector[i]);
 
-    for (var tile_x = 0u; tile_x < TILE_SIZE; tile_x++) {
-        for (var tile_y = 0u; tile_y < TILE_SIZE; tile_y++) {
-
-            let index = get_index(id, tile_x, tile_y);
-            if check_bounds(index) {
-
-                // streaming
-                for (var i = 0; i < 9; i++) {
-                    // Compute source index with proper periodic boundaries
-                    let source = vec2<i32>(index.global) - lattice_vector[i];
-                    let source_wrapped = vec2<i32>(
-                        (source.x + i32(canvas.size.x)) % i32(canvas.size.x),
-                        (source.y + i32(canvas.size.y)) % i32(canvas.size.y)
-                    );
-    
-                    // Get distribution from source
-                    let source_f = textureLoad(distribution, source_wrapped, i).x;
-    
-                    // Store at current cell
-                    textureStore(distribution, vec2<i32>(index.global), i, as_r32float(source_f));
+                    textureStore(distribution, vec2<i32>(y), i, as_r32float(distribution_update));
                 }
             }
         }

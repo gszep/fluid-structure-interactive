@@ -23,7 +23,7 @@ fn main(input: Input) -> Output {
     let x = vec2<i32>((1.0 + input.coordinate) / 2.0 * vec2<f32>(canvas.size));
 
     // density map
-    output.color.r = textureLoad(density, x).r;
+    // output.color.r = textureLoad(density, x).r;
     output.color.g = textureLoad(velocity, x, 0).r;
     output.color.b = textureLoad(velocity, x, 1).r;
 
