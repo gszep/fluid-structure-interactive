@@ -287,15 +287,6 @@ async function index(): Promise<void> {
 		code: prependIncludes(timestepComputeShader, [bindings, cacheUtils]),
 	});
 
-	const interactionPipeline = device.createComputePipeline({
-		label: "interactionPipeline",
-		layout: pipelineLayout,
-		compute: {
-			entryPoint: "interact",
-			module: timestepShaderModule,
-		},
-	});
-
 	const latticeBoltzmannPipeline = device.createComputePipeline({
 		label: "latticeBoltzmannPipeline",
 		layout: pipelineLayout,
@@ -357,10 +348,8 @@ async function index(): Promise<void> {
 		const computePass = command.beginComputePass();
 		computePass.setBindGroup(GROUP_INDEX, bindGroup);
 
-		// interact
-		computePass.setPipeline(interactionPipeline);
+		// interactions
 		device.queue.writeBuffer(interactions.buffer, 0, interactions.data);
-		computePass.dispatchWorkgroups(...WORKGROUP_COUNT);
 
 		// lattice boltzmann method
 		computePass.setPipeline(latticeBoltzmannPipeline);
