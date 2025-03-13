@@ -118,11 +118,13 @@ fn load_component_value(F: texture_storage_2d_array<r32float, read_write>, x: ve
 }
 
 fn store_value(F: texture_storage_2d<r32float, read_write>, index: Index, value: f32) {
-    textureStore(F, vec2<i32>(index.global), as_r32float(value));
+    let y = index.global + canvas.size; // ensure positive coordinates
+    textureStore(F, vec2<i32>(y % canvas.size), as_r32float(value)); // periodic boundary conditions
 }
 
 fn store_component_value(F: texture_storage_2d_array<r32float, read_write>, index: Index, component: i32, value: f32) {
-    textureStore(F, vec2<i32>(index.global), component, as_r32float(value));
+    let y = index.global + canvas.size; // ensure positive coordinates
+    textureStore(F, vec2<i32>(y % canvas.size), component, as_r32float(value)); // periodic boundary conditions
 }
 
 fn check_bounds(index: Index) -> bool {

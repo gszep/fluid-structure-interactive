@@ -101,9 +101,9 @@ fn lattice_boltzmann(id: Invocation) {
                 for (var i = 0; i < 9; i++) {
 
                     let distribution_update = (1.0 - relaxation_frequency) * f[i] + relaxation_frequency * equilibrium[i];
-                    let y = index.global + vec2<u32>(lattice_vector[i]);
+                    let y = Index(index.global + vec2<u32>(lattice_vector[i]), index.local + vec2<u32>(lattice_vector[i]));
 
-                    textureStore(distribution, vec2<i32>(y), i, as_r32float(distribution_update));
+                    store_component_value(distribution, y, i, distribution_update);
                 }
             }
         }
