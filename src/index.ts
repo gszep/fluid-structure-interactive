@@ -17,6 +17,130 @@ import timestepComputeShader from "./shaders/vorticity-streamfunction.comp.wgsl"
 const UPDATE_INTERVAL = 1;
 let frame_index = 0;
 
+const lattice_vector = [
+	[0, 0],
+	[1, 0],
+	[0, 1],
+	[-1, 0],
+	[0, -1],
+	[1, 1],
+	[-1, 1],
+	[-1, -1],
+	[1, -1],
+];
+const lattice_weight = [
+	4.0 / 9.0,
+	1.0 / 9.0,
+	1.0 / 9.0,
+	1.0 / 9.0,
+	1.0 / 9.0,
+	1.0 / 36.0,
+	1.0 / 36.0,
+	1.0 / 36.0,
+	1.0 / 36.0,
+];
+
+function initialDensity(height: number, width: number) {
+	const density = [];
+	for (let i = 0; i < height; i++) {
+		const row = [];
+		for (let j = 0; j < width; j++) {
+			const centerX = width / 2;
+			const centerY = height / 2;
+			const dx = j - centerX;
+			const dy = i - centerY;
+			const distance = Math.sqrt(dx * dx + dy * dy);
+			const sigma = 10;
+			const rho = Math.exp((-distance * distance) / (2 * sigma * sigma));
+
+			row.push([1]);
+		}
+		density.push(row);
+	}
+	return density;
+}
+
+function initialVelocity(height: number, width: number) {
+	// Create empty nested array structure
+	const velocityField = [];
+
+	// Fill with velocity components
+	for (let i = 0; i < height; i++) {
+		const row = [];
+		for (let j = 0; j < width; j++) {
+			// For each cell, store [vx, vy] components
+			// Create a simple circular flow pattern as an example
+			const centerX = width / 2;
+			const centerY = height / 2;
+			const dx = j - centerX;
+			const dy = i - centerY;
+			const distance = Math.sqrt(dx * dx + dy * dy);
+
+			// // Avoid division by zero at center
+			// if (distance < 0.00000000000000001) {
+			// 	row.push([0, 0]);
+			// 	continue;
+			// }
+
+			// Create circular velocity field
+			const strength = 1.1;
+			const vx = (dy / distance) * strength;
+			const vy = (dx / distance) * strength;
+
+			row.push([-vx, vy]);
+		}
+		velocityField.push(row);
+	}
+
+	return velocityField;
+}
+
+function initialReferenceMap(height: number, width: number) {
+	const map = [];
+	for (let i = 0; i < height; i++) {
+		const row = [];
+		for (let j = 0; j < width; j++) {
+			row.push([j / width, i / height]);
+		}
+		map.push(row);
+	}
+	return map;
+}
+
+function computeEquilibrium(density: number[][][], velocity: number[][][]) {
+	const equilibrium = [];
+	const height = density.length;
+	const width = density[0].length;
+	for (let i = 0; i < height; i++) {
+		const row = [];
+		for (let j = 0; j < width; j++) {
+			const cell = [];
+			for (let k = 0; k < 9; k++) {
+				const speed = Math.sqrt(
+					velocity[i][j][0] * velocity[i][j][0] +
+						velocity[i][j][1] * velocity[i][j][1]
+				);
+				const lattice_speed =
+					lattice_vector[k][0] * velocity[i][j][0] +
+					lattice_vector[k][1] * velocity[i][j][1];
+
+				const f_eq =
+					lattice_weight[k] *
+					density[i][j][0] *
+					(1.0 +
+						3.0 * lattice_speed +
+						4.5 * lattice_speed * lattice_speed -
+						1.5 * speed * speed);
+
+				cell.push(f_eq);
+			}
+			row.push(cell);
+		}
+		equilibrium.push(row);
+	}
+	return equilibrium;
+}
+
 async function index(): Promise<void> {
 	// setup and configure WebGPU
 	const device = await requestDevice();
@@ -31,40 +155,67 @@ async function index(): Promise<void> {
 	const RENDER_INDEX = 0;
 
 	const BINDINGS_TEXTURE = {
-		VORTICITY: 0,
+		DENSITY: 0,
 		STREAMFUNCTION: 1,
 		VELOCITY: 2,
 		MAP: 3,
 		DISTRIBUTION: 4,
 	};
 	const BINDINGS_BUFFER = { INTERACTION: 5, CANVAS: 6 };
+	// canvas.size = { width: 64, height: 64 };
 
-	const xmap = new Array(canvas.size.height);
+	const density = initialDensity(canvas.size.height, canvas.size.width);
+	const velocity = initialVelocity(canvas.size.height, canvas.size.width);
+	const equilibrium = computeEquilibrium(density, velocity);
+
+	var error = 0;
 	for (let i = 0; i < canvas.size.height; i++) {
-		xmap[i] = [];
-
 		for (let j = 0; j < canvas.size.width; j++) {
-			xmap[i].push(j / canvas.size.width);
+			let f = equilibrium[i][j];
+			let dens = f.reduce((a, b) => a + b);
+			error += Math.abs(dens - density[i][j][0]);
+
+			let vx =
+				lattice_vector[0][0] * f[0] +
+				lattice_vector[1][0] * f[1] +
+				lattice_vector[2][0] * f[2] +
+				lattice_vector[3][0] * f[3] +
+				lattice_vector[4][0] * f[4] +
+				lattice_vector[5][0] * f[5] +
+				lattice_vector[6][0] * f[6] +
+				lattice_vector[7][0] * f[7] +
+				lattice_vector[8][0] * f[8];
+			let vy =
+				lattice_vector[0][1] * f[0] +
+				lattice_vector[1][1] * f[1] +
+				lattice_vector[2][1] * f[2] +
+				lattice_vector[3][1] * f[3] +
+				lattice_vector[4][1] * f[4] +
+				lattice_vector[5][1] * f[5] +
+				lattice_vector[6][1] * f[6] +
+				lattice_vector[7][1] * f[7] +
+				lattice_vector[8][1] * f[8];
+			error += Math.abs(vx / dens - velocity[i][j][0]);
+			error += Math.abs(vy / dens - velocity[i][j][1]);
 		}
 	}
+	console.log(error);
 
-	const ymap = new Array(canvas.size.height);
-	for (let i = 0; i < canvas.size.height; i++) {
-		ymap[i] = [];
-
-		for (let j = 0; j < canvas.size.width; j++) {
-			ymap[i].push(i / canvas.size.height);
-		}
-	}
+	const map = initialReferenceMap(canvas.size.height, canvas.size.width);
 
 	const textures = setupTextures(
 		device,
 		Object.values(BINDINGS_TEXTURE),
-		{},
+		{
+			[BINDINGS_TEXTURE.DISTRIBUTION]: equilibrium,
+			[BINDINGS_TEXTURE.DENSITY]: density,
+			[BINDINGS_TEXTURE.VELOCITY]: velocity,
+			[BINDINGS_TEXTURE.MAP]: map,
+		},
 		{
 			depthOrArrayLayers: {
-				[BINDINGS_TEXTURE.VORTICITY]: 1,
-				[BINDINGS_TEXTURE.STREAMFUNCTION]: 1,
+				[BINDINGS_TEXTURE.DISTRIBUTION]: 9,
+				[BINDINGS_TEXTURE.DENSITY]: 1,
 				[BINDINGS_TEXTURE.VELOCITY]: 2,
 				[BINDINGS_TEXTURE.MAP]: 2,
 			},
@@ -148,20 +299,11 @@ async function index(): Promise<void> {
 		},
 	});
 
-	const advectionPipeline = device.createComputePipeline({
-		label: "advectionPipeline",
+	const latticeBoltzmannPipeline = device.createComputePipeline({
+		label: "latticeBoltzmannPipeline",
 		layout: pipelineLayout,
 		compute: {
-			entryPoint: "advection",
-			module: timestepShaderModule,
-		},
-	});
-
-	const projectionPipeline = device.createComputePipeline({
-		label: "projectionPipeline",
-		layout: pipelineLayout,
-		compute: {
-			entryPoint: "projection",
+			entryPoint: "lattice_boltzmann",
 			module: timestepShaderModule,
 		},
 	});
@@ -223,14 +365,8 @@ async function index(): Promise<void> {
 		device.queue.writeBuffer(interactions.buffer, 0, interactions.data);
 		computePass.dispatchWorkgroups(...WORKGROUP_COUNT);
 
-		// project
-		computePass.setPipeline(projectionPipeline);
-		for (let i = 0; i < 30; i++) {
-			computePass.dispatchWorkgroups(...WORKGROUP_COUNT);
-		}
-
-		// advect
-		computePass.setPipeline(advectionPipeline);
+		// lattice boltzmann method
+		computePass.setPipeline(latticeBoltzmannPipeline);
 		computePass.dispatchWorkgroups(...WORKGROUP_COUNT);
 
 		computePass.end();

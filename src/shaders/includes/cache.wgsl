@@ -53,7 +53,7 @@ var<workgroup> cache_f32: array<array<array<f32, CACHE_SIZE>, CACHE_SIZE>, 2>;
 var<workgroup> cache_vec2: array<array<array<vec2<f32>, CACHE_SIZE>, CACHE_SIZE>, 2>;
 var<workgroup> cache_vec9: array<array<array<f32, 9>, CACHE_SIZE>, CACHE_SIZE>;
 
-fn update_cache_f32(id: Invocation, idx: u32, F: texture_storage_2d<r32float, read_write>) {
+fn load_cache_f32(id: Invocation, idx: u32, F: texture_storage_2d<r32float, read_write>) {
 
     for (var tile_x = 0u; tile_x < TILE_SIZE; tile_x++) {
         for (var tile_y = 0u; tile_y < TILE_SIZE; tile_y++) {
@@ -65,7 +65,7 @@ fn update_cache_f32(id: Invocation, idx: u32, F: texture_storage_2d<r32float, re
     }
 }
 
-fn update_cache_vec2(id: Invocation, idx: u32, F: texture_storage_2d_array<r32float, read_write>) {
+fn load_cache_vec2(id: Invocation, idx: u32, F: texture_storage_2d_array<r32float, read_write>) {
 
     for (var tile_x = 0u; tile_x < TILE_SIZE; tile_x++) {
         for (var tile_y = 0u; tile_y < TILE_SIZE; tile_y++) {
@@ -78,7 +78,7 @@ fn update_cache_vec2(id: Invocation, idx: u32, F: texture_storage_2d_array<r32fl
     }
 }
 
-fn update_cache_vec9(id: Invocation, F: texture_storage_2d_array<r32float, read_write>) {
+fn load_cache_vec9(id: Invocation, F: texture_storage_2d_array<r32float, read_write>) {
 
     for (var tile_x = 0u; tile_x < TILE_SIZE; tile_x++) {
         for (var tile_y = 0u; tile_y < TILE_SIZE; tile_y++) {

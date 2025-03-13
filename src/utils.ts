@@ -83,7 +83,7 @@ function setupVertexBuffer(
 function setupTextures(
 	device: GPUDevice,
 	bindings: number[],
-	data: { [key: number]: number[] },
+	data: { [key: number]: number[][][] },
 	size: {
 		depthOrArrayLayers?: { [key: number]: number };
 		width: number;
@@ -124,7 +124,6 @@ function setupTextures(
 	});
 
 	Object.keys(textures).forEach((key) => {
-		const random = new Array(size.width * size.height);
 		const layers =
 			key in depthOrArrayLayers ? depthOrArrayLayers[parseInt(key)] : 1;
 
@@ -134,18 +133,12 @@ function setupTextures(
 			viewDimension: layers > 1 ? "2d-array" : "2d",
 		};
 
-		for (let i = 0; i < size.width * size.height; i++) {
-			random[i] = [];
-
-			for (let j = 0; j < layers; j++) {
-				random[i].push(2 * Math.random() - 1);
-			}
-		}
-
 		const array =
 			key in data
-				? new Float32Array(data[parseInt(key)].flat())
-				: new Float32Array(random.flat());
+				? new Float32Array(flatten(data[parseInt(key)]))
+				: new Float32Array(
+						flatten(zeros(size.height, size.width, layers))
+				  );
 
 		device.queue.writeTexture(
 			{ texture: textures[parseInt(key)] },
@@ -182,6 +175,41 @@ function setupTextures(
 		bindingLayout: bindingLayout,
 		size: size,
 	};
+}
+
+function flatten(nestedArray: number[][][]): number[] {
+	const flattened = [];
+	for (let k = 0; k < nestedArray[0][0].length; k++) {
+		for (let i = 0; i < nestedArray.length; i++) {
+			for (let j = 0; j < nestedArray[0].length; j++) {
+				flattened.push(nestedArray[i][j][k]);
+			}
+		}
+	}
+
+	return flattened;
+}
+
+function zeros(
+	height: number,
+	width: number,
+	layers: number = 1
+): number[][][] {
+	const zeroArray = [];
+
+	for (let i = 0; i < height; i++) {
+		const row = [];
+		for (let j = 0; j < width; j++) {
+			const layer = [];
+			for (let k = 0; k < layers; k++) {
+				layer.push(0);
+			}
+			row.push(layer);
+		}
+		zeroArray.push(row);
+	}
+
+	return zeroArray;
 }
 
 function setupInteractions(
