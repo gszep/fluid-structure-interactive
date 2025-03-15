@@ -3,10 +3,9 @@ const VERTEX_INDEX = 0;
 const RENDER_INDEX = 0;
 
 const DENSITY = 0u;
-const STREAMFUNCTION = 1u;
-const VELOCITY = 2u;
-const MAP = 3u;
-const DISTRIBUTION = 4u;
+const VELOCITY = 1u;
+const MAP = 2u;
+const DISTRIBUTION = 3u;
 
-const INTERACTION = 5;
-const CANVAS = 6;
+const INTERACTION = 4;
+const CANVAS = 5;

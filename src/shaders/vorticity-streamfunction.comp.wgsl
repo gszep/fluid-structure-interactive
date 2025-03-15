@@ -14,7 +14,6 @@ const lattice_weight = array<f32, 9>(4.0 / 9.0, 1.0 / 9.0, 1.0 / 9.0, 1.0 / 9.0,
 @group(GROUP_INDEX) @binding(DENSITY) var density: texture_storage_2d<r32float, read_write>;
 @group(GROUP_INDEX) @binding(VELOCITY) var velocity: texture_storage_2d_array<r32float, read_write>;
 @group(GROUP_INDEX) @binding(MAP) var map: texture_storage_2d_array<r32float, read_write>;
-@group(GROUP_INDEX) @binding(STREAMFUNCTION) var streamfunction: texture_storage_2d<r32float, read_write>;
 @group(GROUP_INDEX) @binding(INTERACTION) var<uniform> interaction: Interaction;
 
 // fn load_macroscopics_cache(id: Invocation) {

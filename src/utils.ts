@@ -11,7 +11,7 @@ async function requestDevice(
 	},
 	requiredFeatures: GPUFeatureName[] = [],
 	requiredLimits: Record<string, undefined | number> = {
-		maxStorageTexturesPerShaderStage: 8,
+		maxStorageTexturesPerShaderStage: 4,
 	}
 ): Promise<GPUDevice> {
 	if (!navigator.gpu) throwDetectionError("WebGPU NOT Supported");

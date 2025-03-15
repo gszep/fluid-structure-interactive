@@ -84,7 +84,7 @@ function initialVelocity(height: number, width: number) {
 			const vx = (dy / distance) * rho;
 			const vy = (dx / distance) * rho;
 
-			row.push([0.2, 0]);
+			row.push([0, 0]);
 		}
 		velocityField.push(row);
 	}
@@ -97,7 +97,7 @@ function initialReferenceMap(height: number, width: number) {
 	for (let i = 0; i < height; i++) {
 		const row = [];
 		for (let j = 0; j < width; j++) {
-			row.push([j / width, i / height]);
+			row.push([j, i]);
 		}
 		map.push(row);
 	}
@@ -153,12 +153,11 @@ async function index(): Promise<void> {
 
 	const BINDINGS_TEXTURE = {
 		DENSITY: 0,
-		STREAMFUNCTION: 1,
-		VELOCITY: 2,
-		MAP: 3,
-		DISTRIBUTION: 4,
+		VELOCITY: 1,
+		MAP: 2,
+		DISTRIBUTION: 3,
 	};
-	const BINDINGS_BUFFER = { INTERACTION: 5, CANVAS: 6 };
+	const BINDINGS_BUFFER = { INTERACTION: 4, CANVAS: 5 };
 	// canvas.size = { width: 64, height: 64 };
 
 	const density = initialDensity(canvas.size.height, canvas.size.width);
@@ -284,7 +283,7 @@ async function index(): Promise<void> {
 	// compile shaders
 	const timestepShaderModule = device.createShaderModule({
 		label: "timestepComputeShader",
-		code: prependIncludes(timestepComputeShader, [bindings, cacheUtils]),
+		code: prependIncludes(timestepComputeShader, [cacheUtils, bindings]),
 	});
 
 	const latticeBoltzmannPipeline = device.createComputePipeline({
