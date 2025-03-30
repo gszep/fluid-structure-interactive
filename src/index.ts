@@ -152,7 +152,7 @@ async function index(): Promise<void> {
 	const RENDER_INDEX = 0;
 
 	const BINDINGS_TEXTURE = {
-		DENSITY: 0,
+		FORCE: 0,
 		VELOCITY: 1,
 		MAP: 2,
 		DISTRIBUTION: 3,
@@ -204,14 +204,13 @@ async function index(): Promise<void> {
 		Object.values(BINDINGS_TEXTURE),
 		{
 			[BINDINGS_TEXTURE.DISTRIBUTION]: equilibrium,
-			[BINDINGS_TEXTURE.DENSITY]: density,
 			[BINDINGS_TEXTURE.VELOCITY]: velocity,
 			[BINDINGS_TEXTURE.MAP]: map,
 		},
 		{
 			depthOrArrayLayers: {
 				[BINDINGS_TEXTURE.DISTRIBUTION]: 9,
-				[BINDINGS_TEXTURE.DENSITY]: 1,
+				[BINDINGS_TEXTURE.FORCE]: 2,
 				[BINDINGS_TEXTURE.VELOCITY]: 2,
 				[BINDINGS_TEXTURE.MAP]: 2,
 			},

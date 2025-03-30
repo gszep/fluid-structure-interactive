@@ -49,8 +49,8 @@ const CACHE_SIZE = TILE_SIZE * WORKGROUP_SIZE;
 const DISPATCH_SIZE = (CACHE_SIZE - 2u * HALO_SIZE);
 
 @group(GROUP_INDEX) @binding(CANVAS) var<uniform> canvas: Canvas;
-var<workgroup> cache_f32: array<array<array<f32, CACHE_SIZE>, CACHE_SIZE>, 2>;
-var<workgroup> cache_vec2: array<array<array<vec2<f32>, CACHE_SIZE>, CACHE_SIZE>, 2>;
+var<workgroup> cache_f32: array<array<array<f32, CACHE_SIZE>, CACHE_SIZE>, 1>;
+var<workgroup> cache_vec2: array<array<array<vec2<f32>, CACHE_SIZE>, CACHE_SIZE>, 3>;
 var<workgroup> cache_vec9: array<array<array<f32, 9>, CACHE_SIZE>, CACHE_SIZE>;
 
 fn load_cache_f32(id: Invocation, idx: u32, F: texture_storage_2d<r32float, read_write>) {
