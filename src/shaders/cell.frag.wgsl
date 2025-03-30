@@ -22,10 +22,19 @@ fn main(input: Input) -> Output {
     var output: Output;
     let x = vec2<i32>((1.0 + input.coordinate) / 2.0 * vec2<f32>(canvas.size));
 
+    var eta = vec2<f32>(0.0, 0.0);
+    eta.x = textureLoad(map, x, 0).r;
+    eta.y = textureLoad(map, x, 1).r;
+
+    eta /= vec2<f32>(canvas.size);
+
     // density map
     // output.color.r = textureLoad(density, x).r;
     output.color.g = textureLoad(velocity, x, 0).r;
     output.color.b = textureLoad(velocity, x, 1).r;
+
+    // output.color.r = eta.x;
+    // output.color.g = eta.y;
 
     output.color.a = 1.0;
     return output;
