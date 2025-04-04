@@ -37,12 +37,6 @@ fn main(input: Input) -> Output {
     var output: Output;
     let x = vec2<i32>((1.0 + input.coordinate) / 2.0 * vec2<f32>(canvas.size));
 
-    var eta = vec2<f32>(0.0, 0.0);
-    eta.x = textureLoad(map, x, 0).r;
-    eta.y = textureLoad(map, x, 1).r;
-
-    eta /= vec2<f32>(canvas.size);
     output.color = get_velocity(x);
-
     return output;
-}
+} 
