@@ -3,9 +3,8 @@ const VERTEX_INDEX = 0;
 const RENDER_INDEX = 0;
 
 const FORCE = 0u;
-const VELOCITY = 1u;
-const MAP = 2u;
-const DISTRIBUTION = 3u;
+const MAP = 1u;
+const DISTRIBUTION = 2u;
 
-const INTERACTION = 4;
-const CANVAS = 5;
+const INTERACTION = 3;
+const CANVAS = 4;

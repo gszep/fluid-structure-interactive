@@ -157,50 +157,15 @@ async function index(): Promise<void> {
 
 	const BINDINGS_TEXTURE = {
 		FORCE: 0,
-		VELOCITY: 1,
-		MAP: 2,
-		DISTRIBUTION: 3,
+		MAP: 1,
+		DISTRIBUTION: 2,
 	};
-	const BINDINGS_BUFFER = { INTERACTION: 4, CANVAS: 5 };
+	const BINDINGS_BUFFER = { INTERACTION: 3, CANVAS: 4 };
 	// canvas.size = { width: 64, height: 64 };
 
 	const density = initialDensity(canvas.size.height, canvas.size.width);
 	const velocity = initialVelocity(canvas.size.height, canvas.size.width);
 	const equilibrium = computeEquilibrium(density, velocity);
-
-	var error = 0;
-	for (let i = 0; i < canvas.size.height; i++) {
-		for (let j = 0; j < canvas.size.width; j++) {
-			let f = equilibrium[i][j];
-			let dens = f.reduce((a, b) => a + b);
-			error += Math.abs(dens - density[i][j][0]);
-
-			let vx =
-				lattice_vector[0][0] * f[0] +
-				lattice_vector[1][0] * f[1] +
-				lattice_vector[2][0] * f[2] +
-				lattice_vector[3][0] * f[3] +
-				lattice_vector[4][0] * f[4] +
-				lattice_vector[5][0] * f[5] +
-				lattice_vector[6][0] * f[6] +
-				lattice_vector[7][0] * f[7] +
-				lattice_vector[8][0] * f[8];
-			let vy =
-				lattice_vector[0][1] * f[0] +
-				lattice_vector[1][1] * f[1] +
-				lattice_vector[2][1] * f[2] +
-				lattice_vector[3][1] * f[3] +
-				lattice_vector[4][1] * f[4] +
-				lattice_vector[5][1] * f[5] +
-				lattice_vector[6][1] * f[6] +
-				lattice_vector[7][1] * f[7] +
-				lattice_vector[8][1] * f[8];
-			error += Math.abs(vx / dens - velocity[i][j][0]);
-			error += Math.abs(vy / dens - velocity[i][j][1]);
-		}
-	}
-	console.log(error);
-
 	const map = initialReferenceMap(canvas.size.height, canvas.size.width);
 
 	const textures = setupTextures(
@@ -208,14 +173,12 @@ async function index(): Promise<void> {
 		Object.values(BINDINGS_TEXTURE),
 		{
 			[BINDINGS_TEXTURE.DISTRIBUTION]: equilibrium,
-			[BINDINGS_TEXTURE.VELOCITY]: velocity,
 			[BINDINGS_TEXTURE.MAP]: map,
 		},
 		{
 			depthOrArrayLayers: {
 				[BINDINGS_TEXTURE.DISTRIBUTION]: 9,
 				[BINDINGS_TEXTURE.FORCE]: 2,
-				[BINDINGS_TEXTURE.VELOCITY]: 2,
 				[BINDINGS_TEXTURE.MAP]: 2,
 			},
 			width: canvas.size.width,

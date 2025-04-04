@@ -12,16 +12,29 @@ struct Canvas {
     size: vec2<u32>,
 };
 
-@group(GROUP_INDEX) @binding(VELOCITY) var velocity: texture_storage_2d_array<r32float, read_write>;
+const EPS = 1e-37;
+const lattice_vector = array<vec2<i32>, 9>(vec2<i32>(0, 0), vec2<i32>(1, 0), vec2<i32>(0, 1), vec2<i32>(-1, 0), vec2<i32>(0, -1), vec2<i32>(1, 1), vec2<i32>(-1, 1), vec2<i32>(-1, -1), vec2<i32>(1, -1));
+
+@group(GROUP_INDEX) @binding(DISTRIBUTION) var distribution: texture_storage_2d_array<r32float, read_write>;
 @group(GROUP_INDEX) @binding(MAP) var map: texture_storage_2d_array<r32float, read_write>;
 @group(GROUP_INDEX) @binding(CANVAS) var<uniform> canvas: Canvas;
 
 fn get_velocity(x: vec2<i32>) -> vec4<f32> {
-    let u = textureLoad(velocity, x, 0).r;
-    let v = textureLoad(velocity, x, 1).r;
 
-    let angle = atan2(u, v);
-    let norm = length(vec2<f32>(u, v));
+    var density = 0.0;
+    var momentum = vec2<f32>(0.0, 0.0);
+
+    for (var i = 0; i < 9; i++) {
+        let f = textureLoad(distribution, x, i).r;
+
+        density += f;
+        momentum += f * vec2<f32>(lattice_vector[i]);
+    }
+
+    let velocity = momentum / max(density, EPS);
+
+    let angle = atan2(velocity.x, velocity.y);
+    let norm = length(velocity);
 
     // rainbow along the angle
     return vec4<f32>(

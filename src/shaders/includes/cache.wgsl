@@ -1,22 +1,30 @@
 struct Invocation {
     @builtin(workgroup_id) workGroupID: vec3<u32>,
     @builtin(local_invocation_id) localInvocationID: vec3<u32>,
-};
+}
+
+;
 
 struct Index {
     global: vec2<u32>,
     local: vec2<u32>,
-};
+}
+
+;
 
 struct IndexFloat {
     global: vec2<f32>,
     local: vec2<f32>,
-};
+}
+
+;
 
 struct Canvas {
     size: vec2<u32>,
     frame_index: u32,
-};
+}
+
+;
 
 fn indexf(index: Index) -> IndexFloat {
     return IndexFloat(vec2<f32>(index.global), vec2<f32>(index.local));
@@ -48,9 +56,11 @@ const HALO_SIZE = 1u;
 const CACHE_SIZE = TILE_SIZE * WORKGROUP_SIZE;
 const DISPATCH_SIZE = (CACHE_SIZE - 2u * HALO_SIZE);
 
-@group(GROUP_INDEX) @binding(CANVAS) var<uniform> canvas: Canvas;
+@group(GROUP_INDEX) @binding(CANVAS)
+var<uniform> canvas: Canvas;
+
 var<workgroup> cache_f32: array<array<array<f32, CACHE_SIZE>, CACHE_SIZE>, 1>;
-var<workgroup> cache_vec2: array<array<array<vec2<f32>, CACHE_SIZE>, CACHE_SIZE>, 3>;
+var<workgroup> cache_vec2: array<array<array<vec2<f32>, CACHE_SIZE>, CACHE_SIZE>, 2>;
 var<workgroup> cache_vec9: array<array<array<f32, 9>, CACHE_SIZE>, CACHE_SIZE>;
 
 fn load_cache_f32(id: Invocation, idx: u32, F: texture_storage_2d<r32float, read_write>) {
@@ -108,23 +118,23 @@ fn as_r32float(r: f32) -> vec4<f32> {
 }
 
 fn load_value(F: texture_storage_2d<r32float, read_write>, x: vec2<u32>) -> vec4<f32> {
-    let y = x + canvas.size; // ensure positive coordinates
-    return textureLoad(F, vec2<i32>(y % canvas.size));  // periodic boundary conditions
+    let y = x + canvas.size;
+    return textureLoad(F, vec2<i32>(y % canvas.size));
 }
 
 fn load_component_value(F: texture_storage_2d_array<r32float, read_write>, x: vec2<u32>, component: i32) -> vec4<f32> {
-    let y = x + canvas.size; // ensure positive coordinates
-    return textureLoad(F, vec2<i32>(y % canvas.size), component);  // periodic boundary conditions
+    let y = x + canvas.size;
+    return textureLoad(F, vec2<i32>(y % canvas.size), component);
 }
 
 fn store_value(F: texture_storage_2d<r32float, read_write>, index: Index, value: f32) {
-    let y = index.global + canvas.size; // ensure positive coordinates
-    textureStore(F, vec2<i32>(y % canvas.size), as_r32float(value)); // periodic boundary conditions
+    let y = index.global + canvas.size;
+    textureStore(F, vec2<i32>(y % canvas.size), as_r32float(value));
 }
 
 fn store_component_value(F: texture_storage_2d_array<r32float, read_write>, index: Index, component: i32, value: f32) {
-    let y = index.global + canvas.size; // ensure positive coordinates
-    textureStore(F, vec2<i32>(y % canvas.size), component, as_r32float(value)); // periodic boundary conditions
+    let y = index.global + canvas.size;
+    textureStore(F, vec2<i32>(y % canvas.size), component, as_r32float(value));
 }
 
 fn check_bounds(index: Index) -> bool {
