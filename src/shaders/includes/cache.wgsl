@@ -49,34 +49,34 @@ const CACHE_SIZE = TILE_SIZE * WORKGROUP_SIZE;
 const DISPATCH_SIZE = (CACHE_SIZE - 2u * HALO_SIZE);
 
 @group(GROUP_INDEX) @binding(CANVAS) var<uniform> canvas: Canvas;
-// var<workgroup> cache_f32: array<array<array<f32, CACHE_SIZE>, CACHE_SIZE>, 2>;
-// var<workgroup> cache_vec2: array<array<array<vec2<f32>, CACHE_SIZE>, CACHE_SIZE>, 2>;
+var<workgroup> cache_f32: array<array<array<f32, CACHE_SIZE>, CACHE_SIZE>, 1>;
+var<workgroup> cache_vec2: array<array<array<vec2<f32>, CACHE_SIZE>, CACHE_SIZE>, 3>;
 var<workgroup> cache_vec9: array<array<array<f32, 9>, CACHE_SIZE>, CACHE_SIZE>;
 
-// fn load_cache_f32(id: Invocation, idx: u32, F: texture_storage_2d<r32float, read_write>) {
+fn load_cache_f32(id: Invocation, idx: u32, F: texture_storage_2d<r32float, read_write>) {
 
-//     for (var tile_x = 0u; tile_x < TILE_SIZE; tile_x++) {
-//         for (var tile_y = 0u; tile_y < TILE_SIZE; tile_y++) {
+    for (var tile_x = 0u; tile_x < TILE_SIZE; tile_x++) {
+        for (var tile_y = 0u; tile_y < TILE_SIZE; tile_y++) {
 
-//             let index = get_index(id, tile_x, tile_y);
+            let index = get_index(id, tile_x, tile_y);
 
-//             cache_f32[idx][index.local.x][index.local.y] = load_value(F, index.global).r;
-//         }
-//     }
-// }
+            cache_f32[idx][index.local.x][index.local.y] = load_value(F, index.global).r;
+        }
+    }
+}
 
-// fn load_cache_vec2(id: Invocation, idx: u32, F: texture_storage_2d_array<r32float, read_write>) {
+fn load_cache_vec2(id: Invocation, idx: u32, F: texture_storage_2d_array<r32float, read_write>) {
 
-//     for (var tile_x = 0u; tile_x < TILE_SIZE; tile_x++) {
-//         for (var tile_y = 0u; tile_y < TILE_SIZE; tile_y++) {
+    for (var tile_x = 0u; tile_x < TILE_SIZE; tile_x++) {
+        for (var tile_y = 0u; tile_y < TILE_SIZE; tile_y++) {
 
-//             let index = get_index(id, tile_x, tile_y);
+            let index = get_index(id, tile_x, tile_y);
 
-//             cache_vec2[idx][index.local.x][index.local.y].x = load_component_value(F, index.global, 0).r;
-//             cache_vec2[idx][index.local.x][index.local.y].y = load_component_value(F, index.global, 1).r;
-//         }
-//     }
-// }
+            cache_vec2[idx][index.local.x][index.local.y].x = load_component_value(F, index.global, 0).r;
+            cache_vec2[idx][index.local.x][index.local.y].y = load_component_value(F, index.global, 1).r;
+        }
+    }
+}
 
 fn load_cache_vec9(id: Invocation, F: texture_storage_2d_array<r32float, read_write>) {
 
@@ -91,13 +91,13 @@ fn load_cache_vec9(id: Invocation, F: texture_storage_2d_array<r32float, read_wr
     }
 }
 
-// fn cached_value_f32(idx: u32, x: vec2<u32>) -> f32 {
-//     return cache_f32[idx][x.x][x.y];
-// }
+fn cached_value_f32(idx: u32, x: vec2<u32>) -> f32 {
+    return cache_f32[idx][x.x][x.y];
+}
 
-// fn cached_value_vec2(idx: u32, x: vec2<u32>) -> vec2<f32> {
-//     return cache_vec2[idx][x.x][x.y];
-// }
+fn cached_value_vec2(idx: u32, x: vec2<u32>) -> vec2<f32> {
+    return cache_vec2[idx][x.x][x.y];
+}
 
 fn cached_value_vec9(x: vec2<u32>) -> array<f32, 9> {
     return cache_vec9[x.x][x.y];

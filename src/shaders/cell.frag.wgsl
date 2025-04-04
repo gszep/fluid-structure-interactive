@@ -2,7 +2,7 @@
 
 struct Input {
     @location(VERTEX_INDEX) @interpolate(linear, center) coordinate: vec2<f32>,
-  };
+};
 
 struct Output {
   @location(RENDER_INDEX) color: vec4<f32>
@@ -39,4 +39,4 @@ fn main(input: Input) -> Output {
 
     output.color = get_velocity(x);
     return output;
-}
+} 
