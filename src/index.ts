@@ -70,21 +70,25 @@ function initialVelocity(height: number, width: number) {
 		for (let j = 0; j < width; j++) {
 			// For each cell, store [vx, vy] components
 			// Create a simple circular flow pattern as an example
-			const centerX = width / 2;
-			const centerY = height / 2;
-			const dx = j - centerX;
-			const dy = i - centerY;
-			const distance = Math.sqrt(dx * dx + dy * dy);
+			// const centerX = width / 2;
+			// const centerY = height / 2;
+			// const dx = j - centerX;
+			// const dy = i - centerY;
+			// const distance = Math.sqrt(dx * dx + dy * dy);
 
-			// Create circular velocity field
-			const sigma = 50;
-			var rho = Math.exp((-distance * distance) / (2 * sigma * sigma));
+			// // Create circular velocity field
+			// const sigma = 50;
+			// var rho = Math.exp((-distance * distance) / (2 * sigma * sigma));
 
-			rho = rho * Math.exp((-(distance - 50) * (distance - 50)) / 200);
-			const vx = (dy / distance) * rho;
-			const vy = (dx / distance) * rho;
+			// rho = rho * Math.exp((-(distance - 50) * (distance - 50)) / 200);
+			// const vx = (dy / distance) * rho;
+			// const vy = (dx / distance) * rho;
 
-			row.push([0, 0]);
+			// random velocity
+			const vx = Math.random() * 2 - 1; // Random value between -1 and 1
+			const vy = Math.random() * 2 - 1; // Random value between -1 and 1
+
+			row.push([vx / 10, vy / 10]);
 		}
 		velocityField.push(row);
 	}
