@@ -167,3 +167,58 @@ $$
 #### 5. Semi-Lagrangian Advection
 
 The semi-Lagrangian advection method traces the characteristics of the flow backward in time and interpolates the values from the previous time step. This ensures stability by tracing the flow backward in time to find the departure point and then interpolating the values from the previous time step at that point.
+
+Equation of Motion for the Jacobian of a Vector Field Under Advection
+To derive the equation of motion for the Jacobian of a two-dimensional vector field $\mathbf{f}(x,y)$ that is advected by an external vector field $\boldsymbol{\eta}(x,y)$, I'll work through this systematically.
+
+Starting Point: Advection Equation
+The advection of vector field $\mathbf{f} = (f_1, f_2)$ by vector field $\boldsymbol{\eta} = (\eta_1, \eta_2)$ is given by:
+
+$$\frac{\partial \mathbf{f}}{\partial t} + (\boldsymbol{\eta} \cdot \nabla)\mathbf{f} = 0$$
+
+In component form: $$\frac{\partial f_1}{\partial t} + \eta_1 \frac{\partial f_1}{\partial x} + \eta_2 \frac{\partial f_1}{\partial y} = 0$$ $$\frac{\partial f_2}{\partial t} + \eta_1 \frac{\partial f_2}{\partial x} + \eta_2 \frac{\partial f_2}{\partial y} = 0$$
+
+The Jacobian
+The Jacobian of $\mathbf{f}$ is defined as:
+
+$$J_f = \begin{pmatrix} \frac{\partial f_1}{\partial x} & \frac{\partial f_1}{\partial y} \ \frac{\partial f_2}{\partial x} & \frac{\partial f_2}{\partial y} \end{pmatrix}$$
+
+Let's denote:
+
+$a = \frac{\partial f_1}{\partial x}$
+$b = \frac{\partial f_1}{\partial y}$
+$c = \frac{\partial f_2}{\partial x}$
+$d = \frac{\partial f_2}{\partial y}$
+The Jacobian determinant is: $$J = \det(J_f) = ad - bc$$
+
+Deriving the Time Evolution
+To find the equation of motion for $J$, I need to find $\frac{\partial J}{\partial t}$.
+
+First, differentiate the original advection equations with respect to $x$ and $y$:
+
+$$\frac{\partial a}{\partial t} = -\frac{\partial \eta_1}{\partial x}a - \eta_1\frac{\partial a}{\partial x} - \frac{\partial \eta_2}{\partial x}b - \eta_2\frac{\partial b}{\partial x}$$
+
+$$\frac{\partial b}{\partial t} = -\frac{\partial \eta_1}{\partial y}a - \eta_1\frac{\partial a}{\partial y} - \frac{\partial \eta_2}{\partial y}b - \eta_2\frac{\partial b}{\partial y}$$
+
+$$\frac{\partial c}{\partial t} = -\frac{\partial \eta_1}{\partial x}c - \eta_1\frac{\partial c}{\partial x} - \frac{\partial \eta_2}{\partial x}d - \eta_2\frac{\partial d}{\partial x}$$
+
+$$\frac{\partial d}{\partial t} = -\frac{\partial \eta_1}{\partial y}c - \eta_1\frac{\partial c}{\partial y} - \frac{\partial \eta_2}{\partial y}d - \eta_2\frac{\partial d}{\partial y}$$
+
+Now, for the time derivative of $J$: $$\frac{\partial J}{\partial t} = \frac{\partial a}{\partial t}d + a\frac{\partial d}{\partial t} - \frac{\partial b}{\partial t}c - b\frac{\partial c}{\partial t}$$
+
+Substituting the expressions for $\frac{\partial a}{\partial t}$, $\frac{\partial b}{\partial t}$, $\frac{\partial c}{\partial t}$, and $\frac{\partial d}{\partial t}$ and after algebraic simplification:
+
+$$\frac{\partial J}{\partial t} = -(\eta_1\frac{\partial J}{\partial x} + \eta_2\frac{\partial J}{\partial y}) - (\frac{\partial \eta_1}{\partial x} + \frac{\partial \eta_2}{\partial y})J$$
+
+Final Result
+The equation of motion for the Jacobian determinant is:
+
+$$\boxed{\frac{\partial J}{\partial t} + (\boldsymbol{\eta} \cdot \nabla)J = -(\nabla \cdot \boldsymbol{\eta})J}$$
+
+Which can also be written as:
+
+$$\frac{DJ}{Dt} = -(\nabla \cdot \boldsymbol{\eta})J$$
+
+Where $\frac{D}{Dt} = \frac{\partial}{\partial t} + (\boldsymbol{\eta} \cdot \nabla)$ is the material derivative.
+
+This equation shows that the Jacobian is advected by the flow field $\boldsymbol{\eta}$ while also being affected by the divergence of $\boldsymbol{\eta}$. For an incompressible flow where $\nabla \cdot \boldsymbol{\eta} = 0$, the Jacobian is simply advected without changing along flow trajectories.

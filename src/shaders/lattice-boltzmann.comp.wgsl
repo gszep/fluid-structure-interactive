@@ -23,15 +23,15 @@ var force: texture_storage_2d_array<r32float, read_write>;
 var<uniform> interaction: Interaction;
 
 fn load_macroscopics_cache(id: Invocation) {
-    load_cache_vec2(id, 0u, force);
-    load_cache_vec2(id, 1u, map);
-}
-
-fn get_force(index: Index) -> vec2<f32> {
-    return cached_value_vec2(0u, index.local);
+    load_cache_vec2(id, 0u, map);
+    load_cache_vec2(id, 1u, force);
 }
 
 fn get_reference_map(index: Index) -> vec2<f32> {
+    return cached_value_vec2(0u, index.local);
+}
+
+fn get_force(index: Index) -> vec2<f32> {
     return cached_value_vec2(1u, index.local);
 }
 
@@ -59,11 +59,57 @@ fn get_force_distribution(index: Index, v: vec2<f32>) -> array<f32, 9> {
     );
 }
 
+fn advect_reference_map(index: Index) -> vec2<f32> {
+    const max_norm = f32(HALO_SIZE);
+
+    // compute velocity
+    var density = 0.0;
+    var momentum = vec2<f32>(0.0, 0.0);
+    
+    var f: array<f32, 9>;
+    for (var i = 0u; i < 9u; i++) {
+
+        let y = Index(index.global - vec2<u32>(lattice_vector[i]), index.local - vec2<u32>(lattice_vector[i]));
+        f[i] = get_distribution(y)[i];
+
+        density += f[i];
+        momentum += f[i] * vec2<f32>(lattice_vector[i]);
+    }
+
+    let velocity = momentum / max(density, EPS);
+    let norm = length(velocity);
+
+    let y = subf(indexf(index), (velocity / max(norm, EPS)) * min(norm, max_norm));
+    return get_reference_map_interpolate(y);
+}
+
+fn get_reference_map_interpolate(index: IndexFloat) -> vec2<f32> {
+    let x = index.local;
+
+    let fraction = fract(x);
+    let y = vec2<u32>(x + (0.5 - fraction));
+
+    return mix(
+        mix(
+            cached_value_vec2(0u, y),
+            cached_value_vec2(0u, y + dx),
+            fraction.x
+        ),
+        mix(
+            cached_value_vec2(0u, y + dy),
+            cached_value_vec2(0u, y + dx + dy),
+            fraction.x
+        ),
+        fraction.y
+    );
+}
+
 @compute @workgroup_size(WORKGROUP_SIZE, WORKGROUP_SIZE)
 fn lattice_boltzmann(id: Invocation) {
-    let relaxation_frequency = 1.0; // between 0.0 and 2.0
+    let relaxation_frequency = 1.8; // between 0.0 and 2.0
 
     load_macroscopics_cache(id);
+    load_distribution_cache(id);
     workgroupBarrier();
 
     for (var tile_x = 0u; tile_x < TILE_SIZE; tile_x++) {
@@ -72,9 +118,13 @@ fn lattice_boltzmann(id: Invocation) {
             let index = get_index(id, tile_x, tile_y);
             if check_bounds(index) {
 
+                let reference_map_update = advect_reference_map(index);
+                store_component_value(map, index, 0, reference_map_update.x);
+                store_component_value(map, index, 1, reference_map_update.y);
+
                 var force_update = vec2<f32>(0.0, 0.0);
                 let x = vec2<f32>(index.global);
-                let y = interaction.position + sign(interaction.size) ;
+                let y = interaction.position + sign(interaction.size);
 
                 let dims = vec2<f32>(canvas.size);
                 let distance = length((x - y) - dims * floor((x - y) / dims + 0.5));
@@ -103,7 +153,7 @@ fn lattice_boltzmann(id: Invocation) {
                 var momentum = vec2<f32>(0.0, 0.0);
                 
                 var f: array<f32, 9>;
-                for (var i = 0u; i < 9u; i++) {
+                for (var i = 0; i < 9; i++) {
 
                     let y = Index(index.global - vec2<u32>(lattice_vector[i]), index.local - vec2<u32>(lattice_vector[i]));
                     f[i] = get_distribution(y)[i];

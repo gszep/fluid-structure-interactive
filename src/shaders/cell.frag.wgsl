@@ -45,11 +45,20 @@ fn get_velocity(x: vec2<i32>) -> vec4<f32> {
     );
 }
 
+fn get_reference_map(x: vec2<i32>) -> vec2<f32> {
+    return vec2<f32>(textureLoad(map, x, 0).r, textureLoad(map, x, 1).r);
+}
+
 @fragment
 fn main(input: Input) -> Output {
     var output: Output;
     let x = vec2<i32>((1.0 + input.coordinate) / 2.0 * vec2<f32>(canvas.size));
 
-    output.color = get_velocity(x);
+    let reference_map = get_reference_map(x)/ vec2<f32>(canvas.size);
+
+    output.color.r = reference_map.x;
+    output.color.g = reference_map.y;
+    
+    output.color.a = 1.0;
     return output;
 } 
