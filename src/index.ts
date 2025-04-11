@@ -317,8 +317,10 @@ async function index(): Promise<void> {
 		device.queue.writeBuffer(interactions.buffer, 0, interactions.data);
 
 		// lattice boltzmann method
-		computePass.setPipeline(latticeBoltzmannPipeline);
-		computePass.dispatchWorkgroups(...WORKGROUP_COUNT);
+		for (let i = 0; i < 10; i++) {
+			computePass.setPipeline(latticeBoltzmannPipeline);
+			computePass.dispatchWorkgroups(...WORKGROUP_COUNT);
+		}
 
 		computePass.end();
 
