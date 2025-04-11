@@ -101,7 +101,7 @@ function initialReferenceMap(height: number, width: number) {
 	for (let i = 0; i < height; i++) {
 		const row = [];
 		for (let j = 0; j < width; j++) {
-			row.push([j, i]);
+			row.push([j, i, 0]);
 		}
 		map.push(row);
 	}
@@ -178,8 +178,8 @@ async function index(): Promise<void> {
 		{
 			depthOrArrayLayers: {
 				[BINDINGS_TEXTURE.DISTRIBUTION]: 9,
-				[BINDINGS_TEXTURE.FORCE]: 2,
-				[BINDINGS_TEXTURE.MAP]: 2,
+				[BINDINGS_TEXTURE.FORCE]: 3,
+				[BINDINGS_TEXTURE.MAP]: 3,
 			},
 			width: canvas.size.width,
 			height: canvas.size.height,

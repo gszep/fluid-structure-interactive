@@ -23,16 +23,23 @@ var force: texture_storage_2d_array<r32float, read_write>;
 var<uniform> interaction: Interaction;
 
 fn load_macroscopics_cache(id: Invocation) {
-    load_cache_vec2(id, 0u, map);
-    load_cache_vec2(id, 1u, force);
+    load_cache_mat2x2(id, 0u, map);
+    load_cache_mat2x2(id, 1u, force);
 }
 
 fn get_reference_map(index: Index) -> vec2<f32> {
-    return cached_value_vec2(0u, index.local);
+    let eta = cached_value_mat2x2(0u, index.local);
+    return vec2<f32>(eta[0][0], eta[1][1]);
+}
+
+fn _get_reference_map(x: vec2<u32>) -> vec2<f32> {
+    let eta = cached_value_mat2x2(0u, x);
+    return vec2<f32>(eta[0][0], eta[1][1]);
 }
 
 fn get_force(index: Index) -> vec2<f32> {
-    return cached_value_vec2(1u, index.local);
+    let sigma = cached_value_mat2x2(1u, index.local);
+    return vec2<f32>(sigma[0][0], sigma[1][1]);
 }
 
 fn load_distribution_cache(id: Invocation) {
@@ -91,13 +98,13 @@ fn get_reference_map_interpolate(index: IndexFloat) -> vec2<f32> {
 
     return mix(
         mix(
-            cached_value_vec2(0u, y),
-            cached_value_vec2(0u, y + dx),
+            _get_reference_map(y),
+            _get_reference_map(y + dx),
             fraction.x
         ),
         mix(
-            cached_value_vec2(0u, y + dy),
-            cached_value_vec2(0u, y + dx + dy),
+            _get_reference_map(y + dy),
+            _get_reference_map(y + dx + dy),
             fraction.x
         ),
         fraction.y
