@@ -62,7 +62,7 @@ var<uniform> canvas: Canvas;
 var<workgroup> cache_f32: array<array<array<f32, CACHE_SIZE>, CACHE_SIZE>, 1>;
 var<workgroup> cache_vec2: array<array<array<vec2<f32>, CACHE_SIZE>, CACHE_SIZE>, 2>;
 var<workgroup> cache_mat2x2: array<array<array<mat2x2<f32>, CACHE_SIZE>, CACHE_SIZE>, 1>;
-var<workgroup> cache_vec9: array<array<array<f32, 9>, CACHE_SIZE>, CACHE_SIZE>;
+var<workgroup> cache_vec9: array<f32, CACHE_SIZE * CACHE_SIZE * 9>;
 
 fn load_cache_f32(id: Invocation, idx: u32, F: texture_storage_2d<r32float, read_write>) {
 
@@ -111,7 +111,8 @@ fn load_cache_vec9(id: Invocation, F: texture_storage_2d_array<r32float, read_wr
 
             let index = get_index(id, tile_x, tile_y);
             for (var i = 0; i < 9; i++) {
-                cache_vec9[index.local.x][index.local.y][i] = load_component_value(F, index.global, i);
+                let idx = (index.local.y * CACHE_SIZE + index.local.x) * 9u + u32(i);
+                cache_vec9[idx] = load_component_value(F, index.global, i);
             }
         }
     }
@@ -130,7 +131,12 @@ fn cached_value_mat2x2(idx: u32, x: vec2<u32>) -> mat2x2<f32> {
 }
 
 fn cached_value_vec9(x: vec2<u32>) -> array<f32, 9> {
-    return cache_vec9[x.x][x.y];
+    var vec9: array<f32, 9>;
+    for (var i = 0; i < 9; i++) {
+        let idx = (x.y * CACHE_SIZE + x.x) * 9u + u32(i);
+        vec9[i] = cache_vec9[idx];
+    }
+    return vec9;
 }
 
 fn as_r32float(r: f32) -> vec4<f32> {
