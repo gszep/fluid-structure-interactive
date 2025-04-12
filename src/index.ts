@@ -197,7 +197,7 @@ async function index(): Promise<void> {
 
 	const WORKGROUP_SIZE = 8;
 	const TILE_SIZE = 2;
-	const HALO_SIZE = 1;
+	const HALO_SIZE = 2;
 
 	const CACHE_SIZE = TILE_SIZE * WORKGROUP_SIZE;
 	const DISPATCH_SIZE = CACHE_SIZE - 2 * HALO_SIZE;

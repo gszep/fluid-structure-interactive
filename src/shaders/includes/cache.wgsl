@@ -3,28 +3,20 @@ struct Invocation {
     @builtin(local_invocation_id) localInvocationID: vec3<u32>,
 }
 
-;
-
 struct Index {
     global: vec2<u32>,
     local: vec2<u32>,
 }
-
-;
 
 struct IndexFloat {
     global: vec2<f32>,
     local: vec2<f32>,
 }
 
-;
-
 struct Canvas {
     size: vec2<u32>,
     frame_index: u32,
 }
-
-;
 
 fn indexf(index: Index) -> IndexFloat {
     return IndexFloat(vec2<f32>(index.global), vec2<f32>(index.local));
@@ -51,7 +43,7 @@ const dy = vec2<u32>(0u, 1u);
 
 const TILE_SIZE = 2u;
 const WORKGROUP_SIZE = 8u;
-const HALO_SIZE = 1u;
+const HALO_SIZE = 2u;
 
 const CACHE_SIZE = TILE_SIZE * WORKGROUP_SIZE;
 const DISPATCH_SIZE = (CACHE_SIZE - 2u * HALO_SIZE);
@@ -148,7 +140,7 @@ fn store_component_value(F: texture_storage_2d_array<r32float, read_write>, inde
 }
 
 fn check_bounds(index: Index) -> bool {
-    return (0u < index.local.x) && (index.local.x <= DISPATCH_SIZE) && (0u < index.local.y) && (index.local.y <= DISPATCH_SIZE);
+    return (HALO_SIZE <= index.local.x) && (index.local.x <= DISPATCH_SIZE + HALO_SIZE - 1u) && (HALO_SIZE <= index.local.y) && (index.local.y <= DISPATCH_SIZE + HALO_SIZE - 1u);
 }
 
 fn get_index(id: Invocation, tile_x: u32, tile_y: u32) -> Index {
