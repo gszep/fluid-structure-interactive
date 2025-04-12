@@ -134,7 +134,7 @@ fn lattice_boltzmann(id: Invocation) {
                 }
                 let deformation_gradient_update = advect_deformation_gradient(index);
 
-                for (var i = 0; i < 3; i++) {
+                for (var i = 0; i < 4; i++) {
                     store_component_value(deformation, index, i, deformation_gradient_update[i]);
                     store_component_value(force, index, i, force_update[i]);
                 }
