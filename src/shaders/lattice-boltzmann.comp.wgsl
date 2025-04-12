@@ -13,8 +13,8 @@ const lattice_weight = array<f32, 9>(4.0 / 9.0, 1.0 / 9.0, 1.0 / 9.0, 1.0 / 9.0,
 @group(GROUP_INDEX) @binding(DISTRIBUTION)
 var distribution: texture_storage_2d_array<r32float, read_write>;
 
-@group(GROUP_INDEX) @binding(MAP)
-var map: texture_storage_2d_array<r32float, read_write>;
+@group(GROUP_INDEX) @binding(DEFORMATION)
+var deformation: texture_storage_2d_array<r32float, read_write>;
 
 @group(GROUP_INDEX) @binding(FORCE)
 var force: texture_storage_2d_array<r32float, read_write>;
@@ -23,23 +23,20 @@ var force: texture_storage_2d_array<r32float, read_write>;
 var<uniform> interaction: Interaction;
 
 fn load_macroscopics_cache(id: Invocation) {
-    load_cache_mat2x2(id, 0u, map);
-    load_cache_mat2x2(id, 1u, force);
+    load_cache_vec3(id, 0u, deformation);
+    load_cache_vec3(id, 1u, force);
 }
 
-fn get_reference_map(index: Index) -> vec2<f32> {
-    let eta = cached_value_mat2x2(0u, index.local);
-    return vec2<f32>(eta[0][0], eta[1][1]);
+fn get_deformation_gradient(index: Index) -> vec3<f32> {
+    return cached_value_vec3(0u, index.local);
 }
 
-fn _get_reference_map(x: vec2<u32>) -> vec2<f32> {
-    let eta = cached_value_mat2x2(0u, x);
-    return vec2<f32>(eta[0][0], eta[1][1]);
+fn _get_deformation_gradient(x: vec2<u32>) -> vec3<f32> {
+    return cached_value_vec3(0u, x);
 }
 
-fn get_force(index: Index) -> vec2<f32> {
-    let sigma = cached_value_mat2x2(1u, index.local);
-    return vec2<f32>(sigma[0][0], sigma[1][1]);
+fn get_force(index: Index) -> vec3<f32> {
+    return cached_value_vec3(1u, index.local);
 }
 
 fn load_distribution_cache(id: Invocation) {
@@ -66,7 +63,7 @@ fn get_force_distribution(index: Index, v: vec2<f32>) -> array<f32, 9> {
     );
 }
 
-fn advect_reference_map(index: Index) -> vec2<f32> {
+fn advect_deformation_gradient(index: Index) -> vec3<f32> {
     const max_norm = f32(HALO_SIZE);
 
     // compute velocity
@@ -87,10 +84,10 @@ fn advect_reference_map(index: Index) -> vec2<f32> {
     let norm = length(velocity);
 
     let y = subf(indexf(index), (velocity / max(norm, EPS)) * min(norm, max_norm));
-    return get_reference_map_interpolate(y);
+    return get_deformation_gradient_interpolate(y);
 }
 
-fn get_reference_map_interpolate(index: IndexFloat) -> vec2<f32> {
+fn get_deformation_gradient_interpolate(index: IndexFloat) -> vec3<f32> {
     let x = index.local;
 
     let fraction = fract(x);
@@ -98,13 +95,13 @@ fn get_reference_map_interpolate(index: IndexFloat) -> vec2<f32> {
 
     return mix(
         mix(
-            _get_reference_map(y),
-            _get_reference_map(y + dx),
+            _get_deformation_gradient(y),
+            _get_deformation_gradient(y + dx),
             fraction.x
         ),
         mix(
-            _get_reference_map(y + dy),
-            _get_reference_map(y + dx + dy),
+            _get_deformation_gradient(y + dy),
+            _get_deformation_gradient(y + dx + dy),
             fraction.x
         ),
         fraction.y
@@ -125,23 +122,22 @@ fn lattice_boltzmann(id: Invocation) {
             let index = get_index(id, tile_x, tile_y);
             if check_bounds(index) {
 
-                let reference_map_update = advect_reference_map(index);
-                store_component_value(map, index, 0, reference_map_update.x);
-                store_component_value(map, index, 1, reference_map_update.y);
-
-                var force_update = vec2<f32>(0.0, 0.0);
                 let x = vec2<f32>(index.global);
                 let y = interaction.position + sign(interaction.size);
 
                 let dims = vec2<f32>(canvas.size);
                 let distance = length((x - y) - dims * floor((x - y) / dims + 0.5));
 
+                var force_update = vec3<f32>(0.0, 0.0, 0.0);
                 if distance < abs(interaction.size) {
                     force_update += 0.01 * sign(interaction.size) * exp(- distance * distance / abs(interaction.size));
                 }
+                let deformation_gradient_update = advect_deformation_gradient(index);
 
-                store_component_value(force, index, 0, force_update.x);
-                store_component_value(force, index, 1, force_update.y);
+                for (var i = 0; i < 3; i++) {
+                    store_component_value(deformation, index, i, deformation_gradient_update[i]);
+                    store_component_value(force, index, i, force_update[i]);
+                }
             }
         }
     }

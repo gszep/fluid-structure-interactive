@@ -96,16 +96,16 @@ function initialVelocity(height: number, width: number) {
 	return velocityField;
 }
 
-function initialReferenceMap(height: number, width: number) {
-	const map = [];
+function initialDeformationGradient(height: number, width: number) {
+	const deformation = [];
 	for (let i = 0; i < height; i++) {
 		const row = [];
 		for (let j = 0; j < width; j++) {
 			row.push([j, i, 0]);
 		}
-		map.push(row);
+		deformation.push(row);
 	}
-	return map;
+	return deformation;
 }
 
 function computeEquilibrium(density: number[][][], velocity: number[][][]) {
@@ -157,7 +157,7 @@ async function index(): Promise<void> {
 
 	const BINDINGS_TEXTURE = {
 		FORCE: 0,
-		MAP: 1,
+		DEFORMATION: 1,
 		DISTRIBUTION: 2,
 	};
 	const BINDINGS_BUFFER = { INTERACTION: 3, CANVAS: 4 };
@@ -166,20 +166,23 @@ async function index(): Promise<void> {
 	const density = initialDensity(canvas.size.height, canvas.size.width);
 	const velocity = initialVelocity(canvas.size.height, canvas.size.width);
 	const equilibrium = computeEquilibrium(density, velocity);
-	const map = initialReferenceMap(canvas.size.height, canvas.size.width);
+	const deformation = initialDeformationGradient(
+		canvas.size.height,
+		canvas.size.width
+	);
 
 	const textures = setupTextures(
 		device,
 		Object.values(BINDINGS_TEXTURE),
 		{
 			[BINDINGS_TEXTURE.DISTRIBUTION]: equilibrium,
-			[BINDINGS_TEXTURE.MAP]: map,
+			[BINDINGS_TEXTURE.DEFORMATION]: deformation,
 		},
 		{
 			depthOrArrayLayers: {
 				[BINDINGS_TEXTURE.DISTRIBUTION]: 9,
 				[BINDINGS_TEXTURE.FORCE]: 3,
-				[BINDINGS_TEXTURE.MAP]: 3,
+				[BINDINGS_TEXTURE.DEFORMATION]: 3,
 			},
 			width: canvas.size.width,
 			height: canvas.size.height,

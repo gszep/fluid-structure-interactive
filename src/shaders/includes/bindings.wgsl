@@ -5,7 +5,7 @@ const VERTEX_INDEX = 0;
 const RENDER_INDEX = 0;
 
 const FORCE = 0u;
-const MAP = 1u;
+const DEFORMATION = 1u;
 const DISTRIBUTION = 2u;
 
 const INTERACTION = 3;
