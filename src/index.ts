@@ -101,7 +101,7 @@ function initialDeformationGradient(height: number, width: number) {
 	for (let i = 0; i < height; i++) {
 		const row = [];
 		for (let j = 0; j < width; j++) {
-			row.push([j, i, 0]);
+			row.push([j, i, 0, 0]);
 		}
 		deformation.push(row);
 	}
@@ -181,8 +181,8 @@ async function index(): Promise<void> {
 		{
 			depthOrArrayLayers: {
 				[BINDINGS_TEXTURE.DISTRIBUTION]: 9,
-				[BINDINGS_TEXTURE.FORCE]: 3,
-				[BINDINGS_TEXTURE.DEFORMATION]: 3,
+				[BINDINGS_TEXTURE.FORCE]: 4,
+				[BINDINGS_TEXTURE.DEFORMATION]: 4,
 			},
 			width: canvas.size.width,
 			height: canvas.size.height,

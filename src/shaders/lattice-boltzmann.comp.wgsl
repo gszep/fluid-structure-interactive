@@ -23,20 +23,20 @@ var force: texture_storage_2d_array<r32float, read_write>;
 var<uniform> interaction: Interaction;
 
 fn load_macroscopics_cache(id: Invocation) {
-    load_cache_vec3(id, 0u, deformation);
-    load_cache_vec3(id, 1u, force);
+    load_cache_vec4(id, 0u, deformation);
+    load_cache_vec4(id, 1u, force);
 }
 
-fn get_deformation_gradient(index: Index) -> vec3<f32> {
-    return cached_value_vec3(0u, index.local);
+fn get_deformation_gradient(index: Index) -> vec4<f32> {
+    return cached_value_vec4(0u, index.local);
 }
 
-fn _get_deformation_gradient(x: vec2<u32>) -> vec3<f32> {
-    return cached_value_vec3(0u, x);
+fn _get_deformation_gradient(x: vec2<u32>) -> vec4<f32> {
+    return cached_value_vec4(0u, x);
 }
 
-fn get_force(index: Index) -> vec3<f32> {
-    return cached_value_vec3(1u, index.local);
+fn get_force(index: Index) -> vec4<f32> {
+    return cached_value_vec4(1u, index.local);
 }
 
 fn load_distribution_cache(id: Invocation) {
@@ -63,7 +63,7 @@ fn get_force_distribution(index: Index, v: vec2<f32>) -> array<f32, 9> {
     );
 }
 
-fn advect_deformation_gradient(index: Index) -> vec3<f32> {
+fn advect_deformation_gradient(index: Index) -> vec4<f32> {
     const max_norm = f32(HALO_SIZE);
 
     // compute velocity
@@ -87,7 +87,7 @@ fn advect_deformation_gradient(index: Index) -> vec3<f32> {
     return get_deformation_gradient_interpolate(y);
 }
 
-fn get_deformation_gradient_interpolate(index: IndexFloat) -> vec3<f32> {
+fn get_deformation_gradient_interpolate(index: IndexFloat) -> vec4<f32> {
     let x = index.local;
 
     let fraction = fract(x);
@@ -128,7 +128,7 @@ fn lattice_boltzmann(id: Invocation) {
                 let dims = vec2<f32>(canvas.size);
                 let distance = length((x - y) - dims * floor((x - y) / dims + 0.5));
 
-                var force_update = vec3<f32>(0.0, 0.0, 0.0);
+                var force_update = vec4<f32>(0.0, 0.0, 0.0, 0.0);
                 if distance < abs(interaction.size) {
                     force_update += 0.01 * sign(interaction.size) * exp(- distance * distance / abs(interaction.size));
                 }
