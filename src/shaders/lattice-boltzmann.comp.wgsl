@@ -7,6 +7,12 @@ struct Interaction {
     size: f32,
 };
 
+struct State {
+    f: array<f32, 9>,
+    density: f32,
+    velocity: vec2<f32>,
+};
+
 const lattice_vector = array<vec2<i32>, 9>(vec2<i32>(0, 0), vec2<i32>(1, 0), vec2<i32>(0, 1), vec2<i32>(-1, 0), vec2<i32>(0, -1), vec2<i32>(1, 1), vec2<i32>(-1, 1), vec2<i32>(-1, -1), vec2<i32>(1, -1));
 const lattice_weight = array<f32, 9>(4.0 / 9.0, 1.0 / 9.0, 1.0 / 9.0, 1.0 / 9.0, 1.0 / 9.0, 1.0 / 36.0, 1.0 / 36.0, 1.0 / 36.0, 1.0 / 36.0);
 
@@ -66,7 +72,14 @@ fn get_force_distribution(index: Index, v: vec2<f32>) -> array<f32, 9> {
 fn advect_deformation_gradient(index: Index) -> vec4<f32> {
     const max_norm = f32(HALO_SIZE);
 
-    // compute velocity
+    let velocity = get_state(index).velocity;
+    let norm = length(velocity);
+
+    let y = subf(indexf(index), (velocity / max(norm, EPS)) * min(norm, max_norm));
+    return get_deformation_gradient_interpolate(y);
+}
+
+fn get_state(index: Index) -> State {
     var density = 0.0;
     var momentum = vec2<f32>(0.0, 0.0);
     
@@ -81,10 +94,7 @@ fn advect_deformation_gradient(index: Index) -> vec4<f32> {
     }
 
     let velocity = momentum / max(density, EPS);
-    let norm = length(velocity);
-
-    let y = subf(indexf(index), (velocity / max(norm, EPS)) * min(norm, max_norm));
-    return get_deformation_gradient_interpolate(y);
+    return State(f, density, velocity);
 }
 
 fn get_deformation_gradient_interpolate(index: IndexFloat) -> vec4<f32> {
@@ -152,32 +162,20 @@ fn lattice_boltzmann(id: Invocation) {
             if check_bounds(index) {
 
                 // read distribution from neighbors
-                var density = 0.0;
-                var momentum = vec2<f32>(0.0, 0.0);
-                
-                var f: array<f32, 9>;
-                for (var i = 0; i < 9; i++) {
-
-                    let y = Index(index.global - vec2<u32>(lattice_vector[i]), index.local - vec2<u32>(lattice_vector[i]));
-                    f[i] = get_distribution(y)[i];
-
-                    density += f[i];
-                    momentum += f[i] * vec2<f32>(lattice_vector[i]);
-                }
+                let state = get_state(index);
 
                 // include external forces
-                let velocity = momentum / max(density, EPS);
-                let speed = length(velocity);
+                let speed = length(state.velocity);
+                let F = get_force_distribution(index, state.velocity);
 
-                let F = get_force_distribution(index, velocity);
                 for (var i = 0; i < 9; i++) {
 
                     // compute distribution equilibrium
-                    let lattice_speed = dot(velocity, vec2<f32>(lattice_vector[i]));
-                    let equilibrium = lattice_weight[i] * density * (1.0 + 3.0 * lattice_speed + 4.5 * lattice_speed * lattice_speed - 1.5 * speed * speed);
+                    let lattice_speed = dot(state.velocity, vec2<f32>(lattice_vector[i]));
+                    let equilibrium = lattice_weight[i] * state.density * (1.0 + 3.0 * lattice_speed + 4.5 * lattice_speed * lattice_speed - 1.5 * speed * speed);
                 
                     // BGK collision
-                    let distribution_update = (1.0 - relaxation_frequency) * f[i] + relaxation_frequency * equilibrium + (1.0 - relaxation_frequency / 2.0) * F[i];
+                    let distribution_update = (1.0 - relaxation_frequency) * state.f[i] + relaxation_frequency * equilibrium + (1.0 - relaxation_frequency / 2.0) * F[i];
                     store_component_value(distribution, index, i, distribution_update);
                 }
             }
