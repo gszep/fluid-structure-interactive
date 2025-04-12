@@ -143,6 +143,12 @@ function computeEquilibrium(density: number[][][], velocity: number[][][]) {
 }
 
 async function index(): Promise<void> {
+	const isMobileDevice =
+		/Android|iPhone|iPad|iPod|Opera Mini|IEMobile|WPDesktop/i.test(
+			navigator.userAgent
+		);
+	const compute_iters = isMobileDevice ? 1 : 10;
+
 	// setup and configure WebGPU
 	const device = await requestDevice();
 	const canvas = configureCanvas(device);
@@ -320,7 +326,7 @@ async function index(): Promise<void> {
 		device.queue.writeBuffer(interactions.buffer, 0, interactions.data);
 
 		// lattice boltzmann method
-		for (let i = 0; i < 10; i++) {
+		for (let i = 0; i < compute_iters; i++) {
 			computePass.setPipeline(latticeBoltzmannPipeline);
 			computePass.dispatchWorkgroups(...WORKGROUP_COUNT);
 		}
