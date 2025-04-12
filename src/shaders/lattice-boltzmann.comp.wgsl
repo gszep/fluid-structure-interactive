@@ -37,10 +37,6 @@ fn get_deformation_gradient(index: Index) -> vec4<f32> {
     return cached_value_vec4(0u, index.local);
 }
 
-fn _get_deformation_gradient(x: vec2<u32>) -> vec4<f32> {
-    return cached_value_vec4(0u, x);
-}
-
 fn get_force(index: Index) -> vec4<f32> {
     return cached_value_vec4(1u, index.local);
 }
@@ -75,8 +71,27 @@ fn advect_deformation_gradient(index: Index) -> vec4<f32> {
     let velocity = get_state(index).velocity;
     let norm = length(velocity);
 
-    let y = subf(indexf(index), (velocity / max(norm, EPS)) * min(norm, max_norm));
-    return get_deformation_gradient_interpolate(y);
+    return upwinding(index, (velocity / max(norm, EPS)) * min(norm, max_norm));
+}
+
+fn upwinding(index: Index, v: vec2<f32>) -> vec4<f32> {
+    let F = get_deformation_gradient(index);
+
+    var dx_F:  vec4<f32>;
+    if (v.x > 0.0) {
+        dx_F = 3*F - 4*get_deformation_gradient(sub(index,dx)) + get_deformation_gradient(sub(index,2*dx));
+    } else {
+        dx_F = -3*F + 4*get_deformation_gradient(add(index,dx)) - get_deformation_gradient(add(index,2*dx));
+    }
+
+    var dy_F:  vec4<f32>;
+    if (v.y > 0.0) {
+        dy_F = 3*F - 4*get_deformation_gradient(sub(index,dy)) + get_deformation_gradient(sub(index,2*dy));
+    } else {
+        dy_F = -3*F + 4*get_deformation_gradient(add(index,dy)) - get_deformation_gradient(add(index,2*dy));
+    }
+
+    return F - (v.x * dx_F + v.y * dy_F) / 2;
 }
 
 fn get_state(index: Index) -> State {
@@ -95,27 +110,6 @@ fn get_state(index: Index) -> State {
 
     let velocity = momentum / max(density, EPS);
     return State(f, density, velocity);
-}
-
-fn get_deformation_gradient_interpolate(index: IndexFloat) -> vec4<f32> {
-    let x = index.local;
-
-    let fraction = fract(x);
-    let y = vec2<u32>(x + (0.5 - fraction));
-
-    return mix(
-        mix(
-            _get_deformation_gradient(y),
-            _get_deformation_gradient(y + dx),
-            fraction.x
-        ),
-        mix(
-            _get_deformation_gradient(y + dy),
-            _get_deformation_gradient(y + dx + dy),
-            fraction.x
-        ),
-        fraction.y
-    );
 }
 
 @compute @workgroup_size(WORKGROUP_SIZE, WORKGROUP_SIZE)
