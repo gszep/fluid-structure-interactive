@@ -101,7 +101,13 @@ function initialDeformationGradient(height: number, width: number) {
 	for (let i = 0; i < height; i++) {
 		const row = [];
 		for (let j = 0; j < width; j++) {
-			row.push([j, i, 0, 0]);
+			const centerX = width / 2;
+			const centerY = height / 2;
+			const dx = j - centerX;
+			const dy = i - centerY;
+			const distance = Math.sqrt(dx * dx + dy * dy);
+			const sdf = distance - 1000; // Example SDF value
+			row.push([sdf < 0 ? 1 : 0, 0, 0, sdf < 0 ? 1 : 0]);
 		}
 		deformation.push(row);
 	}
@@ -162,7 +168,7 @@ async function index(): Promise<void> {
 	const RENDER_INDEX = 0;
 
 	const BINDINGS_TEXTURE = {
-		FORCE: 0,
+		STRESS: 0,
 		DEFORMATION: 1,
 		DISTRIBUTION: 2,
 	};
@@ -187,7 +193,7 @@ async function index(): Promise<void> {
 		{
 			depthOrArrayLayers: {
 				[BINDINGS_TEXTURE.DISTRIBUTION]: 9,
-				[BINDINGS_TEXTURE.FORCE]: 4,
+				[BINDINGS_TEXTURE.STRESS]: 4,
 				[BINDINGS_TEXTURE.DEFORMATION]: 4,
 			},
 			width: canvas.size.width,

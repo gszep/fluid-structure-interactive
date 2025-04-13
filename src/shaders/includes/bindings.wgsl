@@ -4,7 +4,7 @@ const GROUP_INDEX = 0;
 const VERTEX_INDEX = 0;
 const RENDER_INDEX = 0;
 
-const FORCE = 0u;
+const STRESS = 0u;
 const DEFORMATION = 1u;
 const DISTRIBUTION = 2u;
 
