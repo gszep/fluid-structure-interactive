@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>String Entities</title>
+    <style>
+      canvas {
+        border: 1px solid grey;
+      }
+      body {
+        background-color: #000000;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+      #gpuTime {
+        position: fixed;
+        top: 10px;
+        left: 10px;
+        color: white;
+        font-family: monospace;
+        background-color: rgba(0, 0, 0, 0.7);
+        padding: 5px;
+        border-radius: 3px;
+      }
+      #fpsCounter {
+        position: fixed;
+        left: 10px;
+        top: 40px;
+        color: white;
+        font-family: monospace;
+        background-color: rgba(0, 0, 0, 0.7);
+        padding: 5px;
+        border-radius: 3px;
+      }
+    </style>
+  <script defer src="runtime.bundle.js"></script><script defer src="index.bundle.js"></script></head>
+  <body>
+    <div id="gpuTime">GPU Time: -- ms</div>
+    <div id="fpsCounter">FPS: --</div>
+  </body>
+</html>
