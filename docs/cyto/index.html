@@ -6,13 +6,12 @@
     <title>String Entities</title>
     <style>
       canvas {
-        border: 1px solid grey;
+        /* border: 1px solid grey; causes scrolling bug on mobile*/
       }
       body {
         background-color: #000000;
-        display: flex;
-        justify-content: center;
-        align-items: center;
+        margin: 0;
+        overflow: hidden;
       }
       #gpuTime {
         position: fixed;
