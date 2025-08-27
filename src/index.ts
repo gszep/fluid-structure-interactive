@@ -31,8 +31,8 @@ async function index(): Promise<void> {
 	const DEBUG = 3;
 
 	const textures = setupTextures(device, [VORTICITY, STREAMFUNCTION, DEBUG], {
-		width: 128,
-		height: 128,
+		width: canvas.size.width,
+		height: canvas.size.height,
 	});
 
 	const WORKGROUP_COUNT: [number, number] = [

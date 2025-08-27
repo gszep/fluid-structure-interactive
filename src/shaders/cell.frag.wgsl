@@ -1,13 +1,11 @@
 struct Input {
-  @location(VERTEX_INDEX) @interpolate(linear, center) coordinate: vec2<f32>,
+    @location(VERTEX_INDEX) @interpolate(linear, center) coordinate: vec2<f32>,
 };
 
 struct Output {
-  @location(RENDER_INDEX) color: vec4<f32>
+    @location(RENDER_INDEX) color: vec4<f32>
 };
 
-@group(GROUP_INDEX) @binding(VORTICITY) var omega: texture_storage_2d<FORMAT, read_write>;
-@group(GROUP_INDEX) @binding(STREAMFUNCTION) var phi: texture_storage_2d<FORMAT, read_write>;
 @group(GROUP_INDEX) @binding(DEBUG) var debug: texture_storage_2d<FORMAT, read_write>;
 
 const size: vec2<f32> = vec2<f32>(WIDTH, HEIGHT);
@@ -15,18 +13,17 @@ const size: vec2<f32> = vec2<f32>(WIDTH, HEIGHT);
 @fragment
 fn main(input: Input) -> Output {
     var output: Output;
-    let x = vec2<i32>((1 + input.coordinate) / 2 * size);
+    let x = vec2<i32>((1.0 + input.coordinate) / 2.0 * size);
 
-    // vorticity map
-    let omega = textureLoad(omega, x);
-    // output.color.g = 5 * max(0, omega.r);
-    // output.color.r = 5 * max(0, -omega.r);
+    let v = textureLoad(debug, x).r;
 
-    // stream function map
-    let phi = textureLoad(phi, x);
-    // output.color.b = abs(phi.r);
+    let black = vec3<f32>(0.0, 0.0, 0.0);
+    let sodium_lamp = vec3<f32>(1.0, 0.7, 0.2);
+    let white = vec3<f32>(1.0, 1.0, 1.0);
 
-    output.color.b = textureLoad(debug, x).r;
-    output.color.a = 1.0;
+    var color = mix(black, sodium_lamp, smoothstep(0.0, 0.5, v));
+    color = mix(color, white, smoothstep(0.5, 1.0, v));
+
+    output.color = vec4<f32>(color, 1.0);
     return output;
 }
