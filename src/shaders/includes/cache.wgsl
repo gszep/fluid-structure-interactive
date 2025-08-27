@@ -52,7 +52,7 @@ const DISPATCH_SIZE = (CACHE_SIZE - 2u * HALO_SIZE);
 var<uniform> canvas: Canvas;
 
 var<workgroup> cache_f32: array<array<array<f32, CACHE_SIZE>, CACHE_SIZE>, 1>;
-var<workgroup> cache_vec4: array<f32, CACHE_SIZE * CACHE_SIZE * 8>;
+var<workgroup> cache_mat2x2: array<f32, CACHE_SIZE * CACHE_SIZE * 8>;
 var<workgroup> cache_vec9: array<f32, CACHE_SIZE * CACHE_SIZE * 9>;
 
 fn load_cache_f32(id: Invocation, idx: u32, F: texture_storage_2d<r32float, read_write>) {
@@ -66,7 +66,7 @@ fn load_cache_f32(id: Invocation, idx: u32, F: texture_storage_2d<r32float, read
     }
 }
 
-fn load_cache_vec4(id: Invocation, idx: u32, F: texture_storage_2d_array<r32float, read_write>) {
+fn load_cache_mat2x2(id: Invocation, idx: u32, F: texture_storage_2d_array<r32float, read_write>) {
 
     for (var tile_x = 0u; tile_x < TILE_SIZE; tile_x++) {
         for (var tile_y = 0u; tile_y < TILE_SIZE; tile_y++) {
@@ -75,7 +75,7 @@ fn load_cache_vec4(id: Invocation, idx: u32, F: texture_storage_2d_array<r32floa
             for (var i = 0; i < 4; i++) {
 
                 let cache_idx = (idx * CACHE_SIZE * CACHE_SIZE * 4u) + u32(i) + (index.local.x * 4u) + (index.local.y * CACHE_SIZE * 4u);
-                cache_vec4[cache_idx] = load_component_value(F, index.global, i);
+                cache_mat2x2[cache_idx] = load_component_value(F, index.global, i);
             }
         }
     }
@@ -100,9 +100,9 @@ fn cached_value_f32(idx: u32, x: vec2<u32>) -> f32 {
     return cache_f32[idx][x.x][x.y];
 }
 
-fn cached_value_vec4(idx: u32, x: vec2<u32>) -> vec4<f32> {
+fn cached_value_mat2x2(idx: u32, x: vec2<u32>) -> mat2x2<f32> {
     let base_idx = (idx * CACHE_SIZE * CACHE_SIZE * 4u) + (x.x * 4u) + (x.y * CACHE_SIZE * 4u);
-    return vec4<f32>(cache_vec4[base_idx + 0u], cache_vec4[base_idx + 1u], cache_vec4[base_idx + 2u], cache_vec4[base_idx + 3u]);
+    return mat2x2<f32>(cache_mat2x2[base_idx + 0u], cache_mat2x2[base_idx + 1u], cache_mat2x2[base_idx + 2u], cache_mat2x2[base_idx + 3u]);
 }
 
 fn cached_value_vec9(x: vec2<u32>) -> array<f32, 9> {

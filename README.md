@@ -5,7 +5,28 @@
 As WebGPU is still in active development, it is likely not yet available in release builds of recent browsers. In particular, chrome users on linux systems must use the following startup flags
 
 ```bash
---enable-unsafe-webgpu --enable-features=Vulkan,VulkanFromANGLE,DefaultANGLEVulkan
+--enable-unsafe-webgpu --enable-features=Vulkan
+```
+
+## Useful VScode Config
+
+The following `.vscode/settings.json` helps hide redudant JavaScript files transpiled from TypeScript. This setting a
+
+```
+{
+    "typescript.tsdk": "node_modules/typescript/lib",
+    "files.exclude": {
+        "**/*.js": {
+            "when": "$(basename).ts"
+        },
+        "**/**.js": {
+            "when": "$(basename).tsx"
+        },
+        "**/*.js.map": true,
+    },
+    "liveServer.settings.NoBrowser": true,
+    "editor.formatOnSave": true
+}
 ```
 
 Other methods can be found [here](https://developer.chrome.com/en/docs/web-platform/webgpu/#use).

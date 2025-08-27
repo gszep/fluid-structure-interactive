@@ -45,8 +45,12 @@ fn get_velocity(x: vec2<i32>) -> vec4<f32> {
     );
 }
 
-fn get_deformation_gradient(x: vec2<i32>) -> vec4<f32> {
-    return vec4<f32>(textureLoad(deformation, x, 0).r, textureLoad(deformation, x, 1).r, textureLoad(deformation, x, 2).r, textureLoad(deformation, x, 3).r);
+fn get_deformation(x: vec2<i32>) -> mat2x2<f32> {
+    return mat2x2<f32>(textureLoad(deformation, x, 0).r, textureLoad(deformation, x, 1).r, textureLoad(deformation, x, 2).r, textureLoad(deformation, x, 3).r);
+}
+
+fn trace(A: mat2x2<f32>) -> f32 {
+    return A[0][0] + A[1][1];
 }
 
 @fragment
@@ -54,12 +58,12 @@ fn main(input: Input) -> Output {
     var output: Output;
     let x = vec2<i32>((1.0 + input.coordinate) / 2.0 * vec2<f32>(canvas.size));
 
-    let F = get_deformation_gradient(x);
-    let det = F[0] * F[3] - F[1] * F[2];
-    let tr = F[0] + F[3];
+    let F = get_deformation(x);
+    let det = determinant(F);
+    let tr = trace(F);
 
-    output.color.r = det / 2;
-    output.color.g = tr / 10;
+    output.color.r = F[0][0] / f32(canvas.size.x);
+    output.color.g = F[1][1] / f32(canvas.size.y);
     
     output.color.a = 1.0;
     return output;

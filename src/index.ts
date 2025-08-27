@@ -107,7 +107,7 @@ function initialDeformationGradient(height: number, width: number) {
 			const dy = i - centerY;
 			const distance = Math.sqrt(dx * dx + dy * dy);
 			const sdf = distance - 1000; // Example SDF value
-			row.push([sdf < 0 ? 1 : 0, 0, 0, sdf < 0 ? 1 : 0]);
+			row.push([i, 0, 0, j]);
 		}
 		deformation.push(row);
 	}
