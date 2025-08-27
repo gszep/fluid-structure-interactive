@@ -7,6 +7,7 @@ struct Invocation {
 struct Interaction {
     position: vec2<f32>,
     size: f32,
+    poisson_iters: f32,
 };
 
 const dx = vec2<u32>(1, 0);
@@ -154,7 +155,7 @@ fn main(id: Invocation) {
 
     // solve poisson equation for stream function
     const relaxation = 1.0;
-    for (var i = 0; i < 100; i = i + 1) {
+    for (var i = 0.0; i < interaction.poisson_iters; i += 1.0) {
         load_cache(id, STREAMFUNCTION, phi);
         textureStore(phi, global, jacobi_iteration(STREAMFUNCTION, VORTICITY, local, relaxation));
     }

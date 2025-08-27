@@ -17,6 +17,12 @@ let frame_index = 0;
 
 async function index(): Promise<void> {
 	// setup and configure WebGPU
+	const isMobileDevice =
+		/Android|iPhone|iPad|iPod|Opera Mini|IEMobile|WPDesktop/i.test(
+			navigator.userAgent
+		);
+	const poisson_iters = isMobileDevice ? 20 : 100;
+
 	const device = await requestDevice();
 	const canvas = configureCanvas(device);
 	const GROUP_INDEX = 0;
@@ -31,8 +37,8 @@ async function index(): Promise<void> {
 	const DEBUG = 3;
 
 	const textures = setupTextures(device, [VORTICITY, STREAMFUNCTION, DEBUG], {
-		width: 257,
-		height: 257,
+		width: 400,
+		height: 400,
 	});
 
 	const WORKGROUP_COUNT: [number, number] = [
@@ -45,7 +51,8 @@ async function index(): Promise<void> {
 	const interactions = setupInteractions(
 		device,
 		canvas.context.canvas,
-		textures.size
+		textures.size,
+		poisson_iters
 	);
 
 	const bindGroupLayout = device.createBindGroupLayout({

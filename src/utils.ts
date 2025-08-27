@@ -509,6 +509,7 @@ function setupInteractions(
 	device: GPUDevice,
 	canvas: HTMLCanvasElement | OffscreenCanvas,
 	texture: { width: number; height: number },
+	poisson_iters: number = 20,
 	size: number = 100
 ): {
 	buffer: GPUBuffer;
@@ -521,7 +522,7 @@ function setupInteractions(
 	let position = { x: 0, y: 0 };
 	let velocity = { x: 0, y: 0 };
 
-	data.set([position.x, position.y]);
+	data.set([position.x, position.y, NaN, poisson_iters]);
 	if (canvas instanceof HTMLCanvasElement) {
 		// disable context menu
 		canvas.addEventListener("contextmenu", (event) => {
