@@ -154,7 +154,7 @@ fn main(id: Invocation) {
 
     // solve poisson equation for stream function
     const relaxation = 1.0;
-    for (var i = 0; i < 300; i = i + 1) {
+    for (var i = 0; i < 100; i = i + 1) {
         load_cache(id, STREAMFUNCTION, phi);
         textureStore(phi, global, jacobi_iteration(STREAMFUNCTION, VORTICITY, local, relaxation));
     }

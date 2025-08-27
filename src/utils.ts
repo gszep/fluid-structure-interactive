@@ -381,7 +381,7 @@ function throwDetectionError(error: string): never {
 }
 
 async function requestDevice(
-	options: GPURequestAdapterOptions = { powerPreference: "high-performance" },
+	options: GPURequestAdapterOptions = { powerPreference: "low-power" },
 	requiredFeatures: GPUFeatureName[] = []
 ): Promise<GPUDevice> {
 	if (!navigator.gpu) throwDetectionError("WebGPU NOT Supported");
