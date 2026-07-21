@@ -33,7 +33,7 @@ async function main(): Promise<void> {
 	const scale = Math.min(grid.width, grid.height);
 	const muscleRadius = 0.018 * scale;
 	const settings = {
-		tau: 0.8, // LB relaxation time; viscosity nu = (tau - 0.5) / 3
+		tau: 0.6, // LB relaxation time; viscosity nu = (tau - 0.5) / 3
 		shearModulus: 0.04, // G (LB units); shear wave speed = sqrt(G / rho)
 		bulkModulus: 0.12, // kappa ~ 3G
 		epsilon: 2.0, // blur-zone half-width (cells)
@@ -42,7 +42,7 @@ async function main(): Promise<void> {
 		radius: 0.035 * scale,
 		muscleHalfLength: 0.06 * scale,
 		muscleRadius: muscleRadius,
-		actuationAmp: Math.log(1.8) / muscleRadius, // max active stretch 1.8x
+		actuationAmp: Math.log(2.0) / muscleRadius, // max active stretch 2x
 		actuationFreq: (2 * Math.PI) / 500, // one stroke every 500 steps
 	};
 

@@ -42,14 +42,22 @@ fn moments(f: array<f32, 9>) -> vec3<f32> {
 
 // ---------------------------------------------------------------------------
 // Pass 1: advect the reference map, d xi/dt + (v . grad) xi = 0.
+//
+// IMPORTANT: the advection velocity must include the Guo half-force
+// correction, v = (sum f_i c_i + F/2) / rho. Advecting with the uncorrected
+// velocity couples the force back into the reference map with the wrong sign
+// and drives an explosive checkerboard instability (verified in the CPU
+// reference tests).
 // ---------------------------------------------------------------------------
 @compute @workgroup_size(8, 8)
 fn advect(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (any(gid.xy >= params.size)) { return; }
     let x = vec2<i32>(gid.xy);
 
+    let force = total_force(x, contraction());
     let m = moments(pull(x));
-    let v = m.yz / max(m.x, EPS);
+    var v = (m.yz + 0.5 * force) / max(m.x, EPS);
+    v = clamp_mag(v, 0.35);
 
     let c = xi_at(x);
     let r1 = xi_near(x + vec2(1, 0), c);
@@ -84,9 +92,7 @@ fn advect(@builtin(global_invocation_id) gid: vec3<u32>) {
 // elastic recovery in between, like the lbrmt jellyfish flapper.
 fn contraction() -> f32 {
     let s = sin(params.actuation_freq * f32(params.step));
-    let s2 = s * s;
-    let s4 = s2 * s2;
-    return -params.actuation_amp * s4 * s4;
+    return -params.actuation_amp * s * s;
 }
 
 // Neo-Hookean stress at a cell edge, from the Jacobian of the reference map,
@@ -121,6 +127,42 @@ fn edge_stress(jac: mat2x2<f32>, xi_edge: vec2<f32>, phi_edge: f32, con: f32) ->
     return sf * (params.shear_modulus * dev + params.bulk_modulus * (J - 1.0) * I);
 }
 
+// Divergence of the solid stress at node x, plus the user interaction force.
+fn total_force(x: vec2<i32>, con: f32) -> vec2<f32> {
+    // 3x3 neighbourhood of the reference map, unwrapped around the centre
+    var xi: array<vec2<f32>, 9>; // index (dx+1) + 3*(dy+1)
+    var phi: array<f32, 9>;
+    let ctr = xi_at(x);
+    for (var dy = -1; dy <= 1; dy++) {
+        for (var dx = -1; dx <= 1; dx++) {
+            let n = xi_near(x + vec2(dx, dy), ctr);
+            xi[(dx + 1) + 3 * (dy + 1)] = n;
+            phi[(dx + 1) + 3 * (dy + 1)] = level_set(n);
+        }
+    }
+    let dl = 0; let dd = 1; let dr = 2;
+    let ll = 3; let cc = 4; let rr = 5;
+    let ul = 6; let uu = 7; let ur = 8;
+
+    // Half-edge stresses (second-order finite differences of xi, as in lbrmt)
+    let sL = edge_stress(
+        mat2x2<f32>(xi[cc] - xi[ll], 0.25 * (xi[uu] + xi[ul] - xi[dd] - xi[dl])),
+        0.5 * (xi[cc] + xi[ll]), 0.5 * (phi[cc] + phi[ll]), con);
+    let sR = edge_stress(
+        mat2x2<f32>(xi[rr] - xi[cc], 0.25 * (xi[ur] + xi[uu] - xi[dr] - xi[dd])),
+        0.5 * (xi[rr] + xi[cc]), 0.5 * (phi[rr] + phi[cc]), con);
+    let sB = edge_stress(
+        mat2x2<f32>(0.25 * (xi[rr] + xi[dr] - xi[ll] - xi[dl]), xi[cc] - xi[dd]),
+        0.5 * (xi[cc] + xi[dd]), 0.5 * (phi[cc] + phi[dd]), con);
+    let sT = edge_stress(
+        mat2x2<f32>(0.25 * (xi[ur] + xi[rr] - xi[ul] - xi[ll]), xi[uu] - xi[cc]),
+        0.5 * (xi[uu] + xi[cc]), 0.5 * (phi[uu] + phi[cc]), con);
+
+    var force = (sR[0] - sL[0]) + (sT[1] - sB[1]);
+    force += interaction_force(vec2<f32>(x));
+    return clamp_mag(force, 0.1);
+}
+
 // Radial push (left click / one finger) or pull (right click / two fingers).
 fn interaction_force(p: vec2<f32>) -> vec2<f32> {
     let a = abs(interaction.size);
@@ -138,41 +180,8 @@ fn collide(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (any(gid.xy >= params.size)) { return; }
     let x = vec2<i32>(gid.xy);
 
-    // 3x3 neighbourhood of the freshly advected reference map
-    var xi: array<vec2<f32>, 9>; // index (dx+1) + 3*(dy+1)
-    var phi: array<f32, 9>;
-    let ctr = xi_at(x);
-    for (var dy = -1; dy <= 1; dy++) {
-        for (var dx = -1; dx <= 1; dx++) {
-            let n = xi_near(x + vec2(dx, dy), ctr);
-            xi[(dx + 1) + 3 * (dy + 1)] = n;
-            phi[(dx + 1) + 3 * (dy + 1)] = level_set(n);
-        }
-    }
-    let dl = 0; let dd = 1; let dr = 2;
-    let ll = 3; let cc = 4; let rr = 5;
-    let ul = 6; let uu = 7; let ur = 8;
-
-    let con = contraction();
-
-    // Half-edge stresses (second-order finite differences of xi, as in lbrmt)
-    let sL = edge_stress(
-        mat2x2<f32>(xi[cc] - xi[ll], 0.25 * (xi[uu] + xi[ul] - xi[dd] - xi[dl])),
-        0.5 * (xi[cc] + xi[ll]), 0.5 * (phi[cc] + phi[ll]), con);
-    let sR = edge_stress(
-        mat2x2<f32>(xi[rr] - xi[cc], 0.25 * (xi[ur] + xi[uu] - xi[dr] - xi[dd])),
-        0.5 * (xi[rr] + xi[cc]), 0.5 * (phi[rr] + phi[cc]), con);
-    let sB = edge_stress(
-        mat2x2<f32>(0.25 * (xi[rr] + xi[dr] - xi[ll] - xi[dl]), xi[cc] - xi[dd]),
-        0.5 * (xi[cc] + xi[dd]), 0.5 * (phi[cc] + phi[dd]), con);
-    let sT = edge_stress(
-        mat2x2<f32>(0.25 * (xi[ur] + xi[rr] - xi[ul] - xi[ll]), xi[uu] - xi[cc]),
-        0.5 * (xi[uu] + xi[cc]), 0.5 * (phi[uu] + phi[cc]), con);
-
-    // Divergence of the solid stress + user interaction
-    var force = (sR[0] - sL[0]) + (sT[1] - sB[1]);
-    force += interaction_force(vec2<f32>(x));
-    force = clamp_mag(force, 0.1);
+    // Divergence of the solid stress (from the freshly advected xi) + user interaction
+    let force = total_force(x, contraction());
 
     // Forced BGK collision (Guo forcing, second order in velocity space)
     let f = pull(x);

@@ -1,5 +1,39 @@
 # Interactive Fluid-Structure Simulation
 
+A real-time WebGPU implementation of the **lattice-Boltzmann reference map technique (LBRMT)** — a fully-Eulerian fluid–structure interaction method — tuned for interactive play rather than biophysical accuracy.
+
+A soft neo-Hookean solid (currently a capsule "flapper" with a periodically actuated muscle region) swims through a D2Q9 lattice-Boltzmann fluid. Poke it with the mouse: left-click pushes, right-click pulls, scroll changes the interaction radius.
+
+## Method
+
+Based on:
+
+- Yue Sun (2020), *A lattice Boltzmann implementation of the reference map technique*, Harvard master's thesis (`2020_Sun.pdf`)
+- Sun & Rycroft (2025), *A fully-integrated lattice Boltzmann method for fluid–structure interaction*, JCP 526 113774 — reference code: https://github.com/yue-sun/lbrmt
+
+Everything lives on one fixed grid. Per timestep, two fully-parallel compute passes over ping-pong textures:
+
+1. **`advect`** — the reference map ξ (the backward flow map) is advected with the force-corrected fluid velocity using second-order ENO upwinding.
+2. **`collide`** — the solid region is `{ x : φ(ξ(x)) < 0 }` (level set evaluated through ξ); half-edge neo-Hookean stresses, smoothed by a blur-zone solid fraction, enter the D2Q9 BGK collision as a Guo forcing term (pull streaming).
+
+GPU-friendly simplifications vs. the papers:
+
+- ξ is advected *globally*, so the layer-by-layer least-squares extrapolation zone is replaced by a gentle far-field diffusion of ξ — every step is a local stencil op.
+- First-order operator splitting between advection and collision (costs one order of convergence in the shear-wave test; see `test/shearwave.test.ts`).
+- Actuation follows the lbrmt `obj_flapper`: an area-preserving active stretch `F ← F·diag(e^{c(t)Y}, e^{-c(t)Y})` inside a muscle region of reference space makes the body bend and swim.
+
+## Development
+
+```bash
+npm install
+npm start          # webpack dev server
+npm test           # unit + physics tests (CPU reference implementation)
+npm run test:e2e   # drives real Chrome + WebGPU via the DevTools protocol
+npm run typecheck  # strict TS check of the test suite
+```
+
+The physics tests ladder up to the thesis results: D2Q9 isotropy, Taylor–Green vortex viscosity, plane shear-wave dispersion/decay and convergence, passive solid equilibrium, poke-and-recover, and a swimming actuated flapper. `test/reference.ts` is a line-for-line CPU mirror of the WGSL solver — keep them in sync.
+
 ## Bleeding-edge WebGPU
 
 As WebGPU is still in active development, it is likely not yet available in release builds of recent browsers. In particular, chrome users on linux systems must use the following startup flags
