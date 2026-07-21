@@ -11,3 +11,5 @@ node_modules
 !docs/runtime.bundle.js
 !docs/*/*.bundle.js
 !webpack.config.js
+# Chi local state and sensitive artifacts (runtime state lives under ~/.chi)
+.chi/
