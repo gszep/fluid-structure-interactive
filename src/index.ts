@@ -2,365 +2,272 @@ import {
 	requestDevice,
 	configureCanvas,
 	setupVertexBuffer,
-	setupTextures,
+	createFieldTexture,
+	writeFieldTexture,
 	setupInteractions,
 	prependIncludes,
 } from "./utils";
 
-import bindings from "./shaders/includes/bindings.wgsl";
-import cacheUtils from "./shaders/includes/cache.wgsl";
+import common from "./shaders/includes/common.wgsl";
+import computeShader from "./shaders/lbrmt.comp.wgsl";
+import vertexShader from "./shaders/quad.vert.wgsl";
+import fragmentShader from "./shaders/render.frag.wgsl";
 
-import cellVertexShader from "./shaders/cell.vert.wgsl";
-import cellFragmentShader from "./shaders/cell.frag.wgsl";
-import timestepComputeShader from "./shaders/lattice-boltzmann.comp.wgsl";
+const isMobile = /Android|iPhone|iPad|iPod|Opera Mini|IEMobile|WPDesktop/i.test(
+	navigator.userAgent
+);
 
-const UPDATE_INTERVAL = 1;
-let frame_index = 0;
+const SIM_SCALE = isMobile ? 3 : 2; // canvas pixels per simulation cell
+const SUBSTEPS = isMobile ? 2 : 8; // simulation steps per rendered frame
+const WORKGROUP_SIZE = 8;
 
-const lattice_vector = [
-	[0, 0],
-	[1, 0],
-	[0, 1],
-	[-1, 0],
-	[0, -1],
-	[1, 1],
-	[-1, 1],
-	[-1, -1],
-	[1, -1],
-];
-const lattice_weight = [
-	4.0 / 9.0,
-	1.0 / 9.0,
-	1.0 / 9.0,
-	1.0 / 9.0,
-	1.0 / 9.0,
-	1.0 / 36.0,
-	1.0 / 36.0,
-	1.0 / 36.0,
-	1.0 / 36.0,
-];
-
-function initialDensity(height: number, width: number) {
-	const density = [];
-	for (let i = 0; i < height; i++) {
-		const row = [];
-		for (let j = 0; j < width; j++) {
-			const centerX = width / 2;
-			const centerY = height / 2;
-			const dx = j - centerX;
-			const dy = i - centerY;
-			const distance = Math.sqrt(dx * dx + dy * dy);
-			const sigma = 10;
-			const rho = Math.exp((-distance * distance) / (2 * sigma * sigma));
-
-			row.push([1]);
-		}
-		density.push(row);
-	}
-	return density;
-}
-
-function initialVelocity(height: number, width: number) {
-	// Create empty nested array structure
-	const velocityField = [];
-
-	// Fill with velocity components
-	for (let i = 0; i < height; i++) {
-		const row = [];
-		for (let j = 0; j < width; j++) {
-			// For each cell, store [vx, vy] components
-			// Create a simple circular flow pattern as an example
-			// const centerX = width / 2;
-			// const centerY = height / 2;
-			// const dx = j - centerX;
-			// const dy = i - centerY;
-			// const distance = Math.sqrt(dx * dx + dy * dy);
-
-			// // Create circular velocity field
-			// const sigma = 50;
-			// var rho = Math.exp((-distance * distance) / (2 * sigma * sigma));
-
-			// rho = rho * Math.exp((-(distance - 50) * (distance - 50)) / 200);
-			// const vx = (dy / distance) * rho;
-			// const vy = (dx / distance) * rho;
-
-			// random velocity
-			const vx = Math.random() * 2 - 1; // Random value between -1 and 1
-			const vy = Math.random() * 2 - 1; // Random value between -1 and 1
-
-			row.push([vx / 10, vy / 10]);
-		}
-		velocityField.push(row);
-	}
-
-	return velocityField;
-}
-
-function initialDeformationGradient(height: number, width: number) {
-	const deformation = [];
-	for (let i = 0; i < height; i++) {
-		const row = [];
-		for (let j = 0; j < width; j++) {
-			const centerX = width / 2;
-			const centerY = height / 2;
-			const dx = j - centerX;
-			const dy = i - centerY;
-			const distance = Math.sqrt(dx * dx + dy * dy);
-			const sdf = distance - 1000; // Example SDF value
-			row.push([i, 0, 0, j]);
-		}
-		deformation.push(row);
-	}
-	return deformation;
-}
-
-function computeEquilibrium(density: number[][][], velocity: number[][][]) {
-	const equilibrium = [];
-	const height = density.length;
-	const width = density[0].length;
-	for (let i = 0; i < height; i++) {
-		const row = [];
-		for (let j = 0; j < width; j++) {
-			const cell = [];
-			for (let k = 0; k < 9; k++) {
-				const speed = Math.sqrt(
-					velocity[i][j][0] * velocity[i][j][0] +
-						velocity[i][j][1] * velocity[i][j][1]
-				);
-				const lattice_speed =
-					lattice_vector[k][0] * velocity[i][j][0] +
-					lattice_vector[k][1] * velocity[i][j][1];
-
-				const f_eq =
-					lattice_weight[k] *
-					density[i][j][0] *
-					(1.0 +
-						3.0 * lattice_speed +
-						4.5 * lattice_speed * lattice_speed -
-						1.5 * speed * speed);
-
-				cell.push(f_eq);
-			}
-			row.push(cell);
-		}
-		equilibrium.push(row);
-	}
-	return equilibrium;
-}
-
-async function index(): Promise<void> {
-	const isMobileDevice =
-		/Android|iPhone|iPad|iPod|Opera Mini|IEMobile|WPDesktop/i.test(
-			navigator.userAgent
-		);
-	const compute_iters = isMobileDevice ? 1 : 10;
-
-	// setup and configure WebGPU
+async function main(): Promise<void> {
 	const device = await requestDevice();
 	const canvas = configureCanvas(device);
-
-	// initialize vertex buffer and textures
-	const QUAD = [-1, -1, 1, -1, 1, 1, -1, -1, 1, 1, -1, 1];
-	const quad = setupVertexBuffer(device, "Quad Vertex Buffer", QUAD);
-
-	const GROUP_INDEX = 0;
-	const VERTEX_INDEX = 0;
-	const RENDER_INDEX = 0;
-
-	const BINDINGS_TEXTURE = {
-		STRESS: 0,
-		DEFORMATION: 1,
-		DISTRIBUTION: 2,
+	const grid = {
+		width: Math.ceil(canvas.size.width / SIM_SCALE),
+		height: Math.ceil(canvas.size.height / SIM_SCALE),
 	};
-	const BINDINGS_BUFFER = { INTERACTION: 3, CANVAS: 4 };
-	// canvas.size = { width: 64, height: 64 };
 
-	const density = initialDensity(canvas.size.height, canvas.size.width);
-	const velocity = initialVelocity(canvas.size.height, canvas.size.width);
-	const equilibrium = computeEquilibrium(density, velocity);
-	const deformation = initialDeformationGradient(
-		canvas.size.height,
-		canvas.size.width
+	// ------------------------- simulation parameters -------------------------
+	const scale = Math.min(grid.width, grid.height);
+	const muscleRadius = 0.018 * scale;
+	const settings = {
+		tau: 0.8, // LB relaxation time; viscosity nu = (tau - 0.5) / 3
+		shearModulus: 0.04, // G (LB units); shear wave speed = sqrt(G / rho)
+		bulkModulus: 0.12, // kappa ~ 3G
+		epsilon: 2.0, // blur-zone half-width (cells)
+		center: [grid.width / 2, grid.height / 2],
+		halfLength: 0.1 * scale,
+		radius: 0.035 * scale,
+		muscleHalfLength: 0.06 * scale,
+		muscleRadius: muscleRadius,
+		actuationAmp: Math.log(1.8) / muscleRadius, // max active stretch 1.8x
+		actuationFreq: (2 * Math.PI) / 500, // one stroke every 500 steps
+	};
+
+	const paramsData = new ArrayBuffer(64);
+	const paramsU32 = new Uint32Array(paramsData);
+	const paramsF32 = new Float32Array(paramsData);
+	paramsU32.set([grid.width, grid.height, 0, SUBSTEPS], 0);
+	paramsF32.set(
+		[
+			settings.tau,
+			settings.shearModulus,
+			settings.bulkModulus,
+			settings.epsilon,
+			...settings.center,
+			settings.halfLength,
+			settings.radius,
+			settings.muscleHalfLength,
+			settings.muscleRadius,
+			settings.actuationAmp,
+			settings.actuationFreq,
+		],
+		4
 	);
 
-	const textures = setupTextures(
-		device,
-		Object.values(BINDINGS_TEXTURE),
-		{
-			[BINDINGS_TEXTURE.DISTRIBUTION]: equilibrium,
-			[BINDINGS_TEXTURE.DEFORMATION]: deformation,
-		},
-		{
-			depthOrArrayLayers: {
-				[BINDINGS_TEXTURE.DISTRIBUTION]: 9,
-				[BINDINGS_TEXTURE.STRESS]: 4,
-				[BINDINGS_TEXTURE.DEFORMATION]: 4,
-			},
-			width: canvas.size.width,
-			height: canvas.size.height,
-		}
-	);
+	const paramsBuffer = device.createBuffer({
+		label: "Params Buffer",
+		size: paramsData.byteLength,
+		usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+	});
 
-	const WORKGROUP_SIZE = 8;
-	const TILE_SIZE = 2;
-	const HALO_SIZE = 2;
-
-	const CACHE_SIZE = TILE_SIZE * WORKGROUP_SIZE;
-	const DISPATCH_SIZE = CACHE_SIZE - 2 * HALO_SIZE;
-
-	const WORKGROUP_COUNT: [number, number] = [
-		Math.ceil(textures.size.width / DISPATCH_SIZE),
-		Math.ceil(textures.size.height / DISPATCH_SIZE),
-	];
-
-	// setup interactions
 	const interactions = setupInteractions(
 		device,
-		canvas.context.canvas,
-		textures.size
+		canvas.context.canvas as HTMLCanvasElement,
+		grid
 	);
 
-	const bindGroupLayout = device.createBindGroupLayout({
-		label: "bindGroupLayout",
+	// --------------------- state textures (ping-pong) ------------------------
+	// reference map xi = (X, Y) and D2Q9 populations f_0..f_8
+	const xi = [0, 1].map((i) =>
+		createFieldTexture(device, `xi${i}`, grid, "rg32float")
+	);
+	const dist = [0, 1].map((i) =>
+		createFieldTexture(device, `dist${i}`, grid, "r32float", 9)
+	);
+
+	// identity reference map
+	const cells = grid.width * grid.height;
+	const xiInit = new Float32Array(cells * 2);
+	for (let y = 0; y < grid.height; y++) {
+		for (let x = 0; x < grid.width; x++) {
+			const i = 2 * (y * grid.width + x);
+			xiInit[i] = x;
+			xiInit[i + 1] = y;
+		}
+	}
+	xi.forEach((t) => writeFieldTexture(device, t, grid, 1, 8, xiInit));
+
+	// equilibrium populations of a quiescent fluid (rho = 1, v = 0)
+	const weights = [4 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 36, 1 / 36, 1 / 36, 1 / 36];
+	const fInit = new Float32Array(cells * 9);
+	weights.forEach((w, layer) => fInit.fill(w, layer * cells, (layer + 1) * cells));
+	dist.forEach((t) => writeFieldTexture(device, t, grid, 9, 4, fInit));
+
+	// ------------------------------ pipelines --------------------------------
+	const computeLayout = device.createBindGroupLayout({
+		label: "computeLayout",
 		entries: [
-			...Object.values(BINDINGS_TEXTURE).map((binding) => ({
-				binding: binding,
-				visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE,
-				storageTexture: textures.bindingLayout[binding],
-			})),
-			...Object.values(BINDINGS_BUFFER).map((binding) => ({
-				binding: binding,
-				visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE,
-				buffer: { type: "uniform" as GPUBufferBindingType },
-			})),
+			{ binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: "uniform" } },
+			{ binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: "uniform" } },
+			{ binding: 2, visibility: GPUShaderStage.COMPUTE, texture: { sampleType: "unfilterable-float" } },
+			{ binding: 3, visibility: GPUShaderStage.COMPUTE, texture: { sampleType: "unfilterable-float", viewDimension: "2d-array" } },
+			{ binding: 4, visibility: GPUShaderStage.COMPUTE, storageTexture: { access: "write-only", format: "rg32float" } },
+			{ binding: 5, visibility: GPUShaderStage.COMPUTE, storageTexture: { access: "write-only", format: "r32float", viewDimension: "2d-array" } },
+		],
+	});
+	const renderLayout = device.createBindGroupLayout({
+		label: "renderLayout",
+		entries: [
+			{ binding: 0, visibility: GPUShaderStage.FRAGMENT, buffer: { type: "uniform" } },
+			{ binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: "unfilterable-float" } },
+			{ binding: 2, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: "unfilterable-float", viewDimension: "2d-array" } },
 		],
 	});
 
-	const bindGroup = device.createBindGroup({
-		label: `Bind Group`,
-		layout: bindGroupLayout,
-		entries: [
-			...Object.values(BINDINGS_TEXTURE).map((binding) => ({
-				binding: binding,
-				resource: textures.textures[binding].createView(),
-			})),
-			...Object.values(BINDINGS_BUFFER).map((binding) => ({
-				binding: binding,
-				resource: {
-					buffer:
-						binding === BINDINGS_BUFFER.INTERACTION
-							? interactions.buffer
-							: textures.canvas.buffer,
-				},
-			})),
-		],
+	const computeModule = device.createShaderModule({
+		label: "lbrmtComputeShader",
+		code: prependIncludes(computeShader, [common]),
 	});
-
-	const pipelineLayout = device.createPipelineLayout({
-		label: "pipelineLayout",
-		bindGroupLayouts: [bindGroupLayout],
+	const computePipelineLayout = device.createPipelineLayout({
+		bindGroupLayouts: [computeLayout],
 	});
+	const [advectPipeline, collidePipeline] = ["advect", "collide"].map(
+		(entryPoint) =>
+			device.createComputePipeline({
+				label: entryPoint,
+				layout: computePipelineLayout,
+				compute: { module: computeModule, entryPoint: entryPoint },
+			})
+	);
 
-	// compile shaders
-	const timestepShaderModule = device.createShaderModule({
-		label: "timestepComputeShader",
-		code: prependIncludes(timestepComputeShader, [cacheUtils, bindings]),
-	});
-
-	const latticeBoltzmannPipeline = device.createComputePipeline({
-		label: "latticeBoltzmannPipeline",
-		layout: pipelineLayout,
-		compute: {
-			entryPoint: "lattice_boltzmann",
-			module: timestepShaderModule,
-		},
-	});
-
+	const quad = setupVertexBuffer(
+		device,
+		"Quad Vertex Buffer",
+		[-1, -1, 1, -1, 1, 1, -1, -1, 1, 1, -1, 1]
+	);
 	const renderPipeline = device.createRenderPipeline({
 		label: "renderPipeline",
-		layout: pipelineLayout,
+		layout: device.createPipelineLayout({ bindGroupLayouts: [renderLayout] }),
 		vertex: {
 			module: device.createShaderModule({
-				code: prependIncludes(cellVertexShader, [bindings]),
-				label: "cellVertexShader",
+				label: "quadVertexShader",
+				code: vertexShader,
 			}),
 			buffers: [
 				{
 					arrayStride: quad.arrayStride,
-					attributes: [
-						{
-							format: quad.format,
-							offset: 0,
-							shaderLocation: VERTEX_INDEX,
-						},
-					],
+					attributes: [{ format: quad.format, offset: 0, shaderLocation: 0 }],
 				},
 			],
 		},
 		fragment: {
 			module: device.createShaderModule({
-				code: prependIncludes(cellFragmentShader, [bindings]),
-				label: "cellFragmentShader",
+				label: "renderFragmentShader",
+				code: prependIncludes(fragmentShader, [common]),
 			}),
-			targets: [
-				{
-					format: canvas.format,
-				},
-			],
+			targets: [{ format: canvas.format }],
 		},
 	});
 
-	const colorAttachments: GPURenderPassColorAttachment[] = [
-		{
-			view: canvas.context.getCurrentTexture().createView(),
-			loadOp: "load",
-			storeOp: "store",
-		},
+	// ------------------------------ bind groups ------------------------------
+	const xiViews = xi.map((t) => t.createView());
+	const fViews = dist.map((t) => t.createView());
+
+	const computeBindGroup = (
+		label: string,
+		xiSrc: number,
+		fSrc: number,
+		xiDst: number,
+		fDst: number
+	) =>
+		device.createBindGroup({
+			label: label,
+			layout: computeLayout,
+			entries: [
+				{ binding: 0, resource: { buffer: paramsBuffer } },
+				{ binding: 1, resource: { buffer: interactions.buffer } },
+				{ binding: 2, resource: xiViews[xiSrc] },
+				{ binding: 3, resource: fViews[fSrc] },
+				{ binding: 4, resource: xiViews[xiDst] },
+				{ binding: 5, resource: fViews[fDst] },
+			],
+		});
+
+	// d = index of the textures holding the current state
+	// advect: reads xi[d], f[d] -> writes xi[1-d]
+	// collide: reads xi[1-d] (new), f[d] -> writes f[1-d]
+	const advectGroups = [0, 1].map((d) =>
+		computeBindGroup(`advect${d}`, d, d, 1 - d, 1 - d)
+	);
+	const collideGroups = [0, 1].map((d) =>
+		computeBindGroup(`collide${d}`, 1 - d, d, d, 1 - d)
+	);
+	const renderGroups = [0, 1].map((d) =>
+		device.createBindGroup({
+			label: `render${d}`,
+			layout: renderLayout,
+			entries: [
+				{ binding: 0, resource: { buffer: paramsBuffer } },
+				{ binding: 1, resource: xiViews[d] },
+				{ binding: 2, resource: fViews[d] },
+			],
+		})
+	);
+
+	// ------------------------------ main loop --------------------------------
+	const workgroups: [number, number] = [
+		Math.ceil(grid.width / WORKGROUP_SIZE),
+		Math.ceil(grid.height / WORKGROUP_SIZE),
 	];
-	const renderPassDescriptor = {
-		colorAttachments: colorAttachments,
-	};
 
-	function render() {
-		const command = device.createCommandEncoder();
+	let current = 0;
+	let step = 0;
 
-		// compute pass
-		const computePass = command.beginComputePass();
-		computePass.setBindGroup(GROUP_INDEX, bindGroup);
-
-		// interactions
+	function frame() {
+		paramsU32[2] = step;
+		device.queue.writeBuffer(paramsBuffer, 0, paramsData);
 		device.queue.writeBuffer(interactions.buffer, 0, interactions.data);
 
-		// lattice boltzmann method
-		for (let i = 0; i < compute_iters; i++) {
-			computePass.setPipeline(latticeBoltzmannPipeline);
-			computePass.dispatchWorkgroups(...WORKGROUP_COUNT);
+		const encoder = device.createCommandEncoder();
+
+		const compute = encoder.beginComputePass();
+		for (let s = 0; s < SUBSTEPS; s++) {
+			compute.setPipeline(advectPipeline);
+			compute.setBindGroup(0, advectGroups[current]);
+			compute.dispatchWorkgroups(...workgroups);
+
+			compute.setPipeline(collidePipeline);
+			compute.setBindGroup(0, collideGroups[current]);
+			compute.dispatchWorkgroups(...workgroups);
+
+			current = 1 - current;
 		}
+		compute.end();
+		step += SUBSTEPS;
 
-		computePass.end();
+		const render = encoder.beginRenderPass({
+			colorAttachments: [
+				{
+					view: canvas.context.getCurrentTexture().createView(),
+					loadOp: "clear",
+					clearValue: { r: 0, g: 0, b: 0, a: 1 },
+					storeOp: "store",
+				},
+			],
+		});
+		render.setPipeline(renderPipeline);
+		render.setBindGroup(0, renderGroups[current]);
+		render.setVertexBuffer(0, quad.vertexBuffer);
+		render.draw(quad.vertexCount);
+		render.end();
 
-		// render pass
-		const texture = canvas.context.getCurrentTexture();
-		const view = texture.createView();
-
-		renderPassDescriptor.colorAttachments[RENDER_INDEX].view = view;
-		const renderPass = command.beginRenderPass(renderPassDescriptor);
-		renderPass.setBindGroup(GROUP_INDEX, bindGroup);
-
-		renderPass.setPipeline(renderPipeline);
-		renderPass.setVertexBuffer(VERTEX_INDEX, quad.vertexBuffer);
-
-		renderPass.draw(quad.vertexCount);
-		renderPass.end();
-
-		// submit the command buffer
-		device.queue.submit([command.finish()]);
-		texture.destroy();
-		frame_index++;
+		device.queue.submit([encoder.finish()]);
+		requestAnimationFrame(frame);
 	}
-
-	setInterval(render, UPDATE_INTERVAL);
-	return;
+	requestAnimationFrame(frame);
 }
 
-index();
+main();
