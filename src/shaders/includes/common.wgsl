@@ -44,6 +44,14 @@ struct Params {
     pivot_radius: f32,         // rotor: radius of the anchored pivot region
     spin_angle: f32,           // rotor: half of the maximum spin angle
     spin_freq: f32,            // rotor: angular velocity of the spin drive
+    friction: f32,             // Rayleigh friction (momentum sink; the
+                               // periodic box has no walls to absorb the
+                               // momentum anchored rotors pump into it)
+    heal: f32,                 // anchored scenes: relax xi toward the ideal
+                               // rigidly-rotated map (analytic substitute
+                               // for the paper's extrapolation zone)
+    pad0: f32,
+    pad1: f32,
 };
 
 struct Interaction {
@@ -132,7 +140,9 @@ fn smooth_rotor(p: vec2<f32>, l: f32, r: f32, s: f32) -> f32 {
 
 fn sdf_shape(p: vec2<f32>) -> f32 {
     if (params.shape == 1u) {
-        return seven_star(p, params.half_length);
+        // dilate by radius: rounds the tips and thickens the wedge arms,
+        // which would otherwise erode inside the blur zone
+        return seven_star(p, params.half_length) - params.radius;
     }
     if (params.shape == 2u) {
         // muscle_radius doubles as the fillet radius here
@@ -145,6 +155,21 @@ fn sdf_shape(p: vec2<f32>) -> f32 {
 // phi < 0 inside the solid, phi > 0 in the fluid.
 fn level_set(xi: vec2<f32>) -> f32 {
     return sdf_shape(reference_coord(xi));
+}
+
+// Level set gated by world position: an *anchored* rotor cannot leave the
+// neighbourhood of its pivot, so any apparent solid beyond the gate radius
+// is a phantom (wound-up far-field reference map) and is treated as fluid.
+// The far-field xi is then purely cosmetic for anchored scenes.
+fn level_set_at(xi: vec2<f32>, p: vec2<f32>) -> f32 {
+    let phi = level_set(xi);
+    if (params.shape == 0u) { return phi; }
+    let s = vec2<f32>(params.size);
+    var d = p - params.center;
+    d -= s * round(d / s);
+    if (params.shape == 2u) { d = rotor_lattice(d).xy; }
+    let gate = params.half_length + params.radius + 4.0 * params.epsilon;
+    return max(phi, length(d) - gate);
 }
 
 // Smoothed Heaviside: 1 in the solid, 0 in the fluid,

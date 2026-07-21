@@ -6,8 +6,8 @@ Soft neo-Hookean solids move through a D2Q9 lattice-Boltzmann fluid. Interact wi
 
 Scenes (`?scene=` URL parameter):
 
-- **`rotors`** (default) — four anchored three-pronged rotors in contact, rows spinning in opposite directions through a full revolution and back (JCP paper Fig. 9)
-- **`rotor`** — a single seven-pointed star rotor twisted by an oscillatory anchor force (thesis section 3.3)
+- **`rotor`** (default) — a seven-pointed star making full alternating revolutions, driven by an anchor force (thesis section 3.3); stable indefinitely at 60 fps
+- **`rotors`** — four anchored three-pronged rotors, rows spinning in opposite directions through a full revolution and back (JCP paper section 4.2); extreme transient deformation, perfect recovery each cycle
 - **`flapper`** — a capsule with a periodically actuated muscle region that bends and swims
 
 ## Method
@@ -39,6 +39,19 @@ npm run typecheck  # strict TS check of the test suite
 ```
 
 The physics tests ladder up to the thesis results: D2Q9 isotropy, Taylor–Green vortex viscosity, plane shear-wave dispersion/decay and convergence, passive solid equilibrium, poke-and-recover, and a swimming actuated flapper. `test/reference.ts` is a line-for-line CPU mirror of the WGSL solver — keep them in sync.
+
+### CUDA reference
+
+`cuda/lbrmt.cu` mirrors the WGSL solver in float32 at production resolution (448² × 100k steps in ~5 s on an RTX GPU). It is the tool for tuning and long-run stability work — it emits JSON coherence metrics (mass, solid area, debris, anchor drift, rotation tracking) and grayscale BMP snapshots (white fluid / black solid; if it starts looking like ink in water, something is wrong). `npm test` runs long-run rotor stability tests through it when `nvcc` is available.
+
+Stability ingredients for anchored rotors, found with this loop (all mirrored in the WGSL):
+
+- **acceleration-capped forcing** (`|F| ≤ clamp · min(ρ,1)`) — prevents runaway blow-up of near-vacuum cells
+- **displacement-capped anchor spring with a smooth footprint** — a motor with slip instead of a runaway pull that cavitates the pivot
+- **position-gated level set** — an anchored body cannot leave its pivot neighbourhood, so distant "solid" is phantom by definition
+- **weak Rayleigh friction** (3e-4) — the periodic box has no walls to absorb the momentum the drive pumps in
+- **analytic healing** (3e-4) — the drive angle is known exactly, so ξ relaxes toward the ideal rigidly-rotated map: strongly in the fluid (substituting for the paper's extrapolation zone), weakly in the solid (curing secular inflation while leaving elastic bending free)
+- **slow drive, many substeps** — tip speed must stay well below the shear wave speed √G (the paper's regime is ~0.03 cells/step); 32 substeps/frame keeps it real-time
 
 ## Bleeding-edge WebGPU
 

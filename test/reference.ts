@@ -85,6 +85,13 @@ export interface SolverParams {
 	pivotRadius?: number;
 	spinAngle?: number;
 	spinFreq?: number;
+	anchorStrength?: number;
+	anchorRange?: number;
+	friction?: number;
+	heal?: number;
+	diffusionRate?: number;
+	diffusionFrom?: number;
+	diffusionTo?: number;
 }
 
 export type ExternalForce = (x: number, y: number, step: number) => [number, number];
@@ -119,6 +126,13 @@ export class Solver {
 	pivotRadius!: number;
 	spinAngle!: number;
 	spinFreq!: number;
+	anchorStrength!: number;
+	anchorRange!: number;
+	friction!: number;
+	heal!: number;
+	diffusionRate!: number;
+	diffusionFrom!: number;
+	diffusionTo!: number;
 	xiX!: Float32Array;
 	xiY!: Float32Array;
 	f!: Float32Array[];
@@ -140,13 +154,21 @@ export class Solver {
 			muscleRadius: 1,
 			actuationAmp: 0,
 			actuationFreq: 2 * Math.PI / 500,
-			forceClamp: 0.1,
+			forceClamp: 0.2,
 			velocityClamp: 0.25,
 			externalForce: null, // (x, y, step) => [Fx, Fy]
 			shape: 0, // 0 = capsule flapper, 1 = seven-pointed rotor
 			pivotRadius: 4,
 			spinAngle: Math.PI,
 			spinFreq: (2 * Math.PI) / 3000,
+			anchorStrength: 0.02,
+			anchorRange: 4,
+			friction: 0,
+			heal: 0,
+			// far-field xi diffusion: rate * smoothstep(from * eps, to * eps, phi)
+			diffusionRate: 0.3,
+			diffusionFrom: 1,
+			diffusionTo: 3,
 		};
 		Object.assign(this, defaults, params);
 
@@ -199,9 +221,21 @@ export class Solver {
 		return [px - kx * pitchX, py - ky * pitchY, row === 1 ? -1 : 1];
 	}
 
+	/** Level set gated by world position (anchored scenes cannot leave the
+	 * pivot neighbourhood; beyond the gate everything is fluid). */
+	levelSetAt(X: number, Y: number, x: number, y: number): number {
+		const phi = this.levelSet(X, Y);
+		if (this.shape === 0) return phi;
+		let dx = unwrap(x - this.cx, 0, this.width);
+		let dy = unwrap(y - this.cy, 0, this.height);
+		if (this.shape === 2) [dx, dy] = this.rotorLattice(dx, dy);
+		const gate = this.halfLength + this.radius + 4 * this.epsilon;
+		return Math.max(phi, Math.hypot(dx, dy) - gate);
+	}
+
 	levelSet(X: number, Y: number): number {
 		let [a, b] = this.refCoord(X, Y);
-		if (this.shape === 1) return sevenStar(a, b, this.halfLength);
+		if (this.shape === 1) return sevenStar(a, b, this.halfLength) - this.radius;
 		if (this.shape === 2) {
 			const [ra, rb] = this.rotorLattice(a, b);
 			return smoothRotor(ra, rb, this.halfLength, this.radius, this.muscleRadius);
@@ -282,7 +316,22 @@ export class Solver {
 		};
 		const cc = nb(0, 0), ll = nb(-1, 0), rr = nb(1, 0), uu = nb(0, 1), dd = nb(0, -1);
 		const ul = nb(-1, 1), ur = nb(1, 1), dl = nb(-1, -1), dr = nb(1, -1);
-		const phi = (p: [number, number]) => this.levelSet(p[0], p[1]);
+		const offs: Record<string, [number, number]> = {};
+		const phiAt = (p: [number, number], ox: number, oy: number) =>
+			this.levelSetAt(p[0], p[1], x + ox, y + oy);
+		const phi = (p: [number, number]) => {
+			// gate by the matching neighbour position
+			if (p === cc) return phiAt(p, 0, 0);
+			if (p === ll) return phiAt(p, -1, 0);
+			if (p === rr) return phiAt(p, 1, 0);
+			if (p === uu) return phiAt(p, 0, 1);
+			if (p === dd) return phiAt(p, 0, -1);
+			if (p === ul) return phiAt(p, -1, 1);
+			if (p === ur) return phiAt(p, 1, 1);
+			if (p === dl) return phiAt(p, -1, -1);
+			return phiAt(p, 1, -1);
+		};
+		void offs;
 
 		const sL = this.edgeStress(
 			cc[0] - ll[0], 0.25 * (uu[0] + ul[0] - dd[0] - dl[0]),
@@ -313,15 +362,19 @@ export class Solver {
 				[xrelX, xrelY, spin] = this.rotorLattice(xrelX, xrelY);
 				[X, Y] = this.rotorLattice(X, Y);
 			}
-			const pr = this.pivotRadius + this.epsilon;
-			if (xrelX * xrelX + xrelY * xrelY < pr * pr) {
+			// smooth footprint, displacement-capped spring (motor with slip)
+			const r = Math.hypot(xrelX, xrelY);
+			const tt = Math.min(1, Math.max(0, (r - this.pivotRadius) / (2 * this.epsilon)));
+			const w = 1 - tt * tt * (3 - 2 * tt);
+			if (w > 0) {
 				const theta = spin * this.spinAngle * (1 - Math.cos(this.spinFreq * this.step_));
 				const ct = Math.cos(theta), st = Math.sin(theta);
 				const rx = X * ct - Y * st;
 				const ry = X * st + Y * ct;
-				const lam = this.solidFraction(this.levelSet(cX, cY));
-				Fx += -0.01 * lam * (xrelX - rx);
-				Fy += -0.01 * lam * (xrelY - ry);
+				const lam = this.solidFraction(this.levelSetAt(cX, cY, x, y));
+				const [dx2, dy2] = this.clampMag(xrelX - rx, xrelY - ry, this.anchorRange);
+				Fx += -this.anchorStrength * lam * w * dx2;
+				Fy += -this.anchorStrength * lam * w * dy2;
 			}
 		}
 		if (this.externalForce) {
@@ -329,15 +382,17 @@ export class Solver {
 			Fx += ex;
 			Fy += ey;
 		}
-		return this.clampMag(Fx, Fy, this.forceClamp);
+		return [Fx, Fy]; // clamped against the local density by the caller
 	}
 
 	/** Force-corrected macroscopic velocity (Guo), used for advection and collision. */
-	hydroVelocity(x: number, y: number, Fx: number, Fy: number): [number, number, number] {
+	hydroVelocity(x: number, y: number, Fx0: number, Fy0: number): [number, number, number, number, number] {
 		const [rho0, mx, my] = this.moments(this.pull(x, y));
 		const rho = Math.max(rho0, 1e-6);
+		// cap the *acceleration*: near-vacuum cells must not be blown apart
+		const [Fx, Fy] = this.clampMag(Fx0, Fy0, this.forceClamp * Math.min(rho, 1));
 		const [u, v] = this.clampMag((mx + 0.5 * Fx) / rho, (my + 0.5 * Fy) / rho, this.velocityClamp);
-		return [rho, u, v];
+		return [rho, u, v, Fx, Fy];
 	}
 
 	advance(): void {
@@ -347,8 +402,8 @@ export class Solver {
 		const nxiX = new Float32Array(W * H), nxiY = new Float32Array(W * H);
 		for (let y = 0; y < H; y++)
 			for (let x = 0; x < W; x++) {
-				const [Fx, Fy] = this.solidForce(x, y, con);
-				const [, u, v] = this.hydroVelocity(x, y, Fx, Fy);
+				const [Fx0, Fy0] = this.solidForce(x, y, con);
+				const [, u, v] = this.hydroVelocity(x, y, Fx0, Fy0);
 				const k = y * W + x, cX = this.xiX[k], cY = this.xiY[k];
 				const g = (dx: number, dy: number, c: number, arr: Float32Array, n: number) => unwrap(arr[this.idx(x + dx, y + dy)], c, n);
 				const XR1 = g(1, 0, cX, this.xiX, W), XR2 = g(2, 0, cX, this.xiX, W);
@@ -365,12 +420,29 @@ export class Solver {
 				const dYdy = v > 0 ? eno2(YU1, cY, YD1, YD2) : -eno2(YD1, cY, YU1, YU2);
 				let nX = cX - (u * dXdx + v * dXdy);
 				let nY = cY - (u * dYdx + v * dYdy);
-				// far-field smoothing (smoothstep(2e, 6e, phi) * 0.1)
-				const phi = this.levelSet(cX, cY);
+				// far-field smoothing
+				const phi = this.levelSetAt(cX, cY, x, y);
 				const t = Math.min(1, Math.max(0, (phi - this.epsilon) / (2 * this.epsilon)));
 				const w = 0.1 * t * t * (3 - 2 * t);
 				nX = nX * (1 - w) + w * 0.25 * (XR1 + XL1 + XU1 + XD1);
 				nY = nY * (1 - w) + w * 0.25 * (YR1 + YL1 + YU1 + YD1);
+				// anchored scenes: heal xi toward the analytic rotated map
+				if (this.shape !== 0 && this.heal > 0) {
+					let dx = unwrap(x - this.cx, 0, this.width);
+					let dy = unwrap(y - this.cy, 0, this.height);
+					let spin = 1;
+					if (this.shape === 2) [dx, dy, spin] = this.rotorLattice(dx, dy);
+					const theta = spin * this.spinAngle * (1 - Math.cos(this.spinFreq * this.step_));
+					const ct = Math.cos(theta), st = Math.sin(theta);
+					let tx = x - dx + (dx * ct + dy * st);
+					let ty = y - dy + (-dx * st + dy * ct);
+					tx = unwrap(tx, cX, this.width);
+					ty = unwrap(ty, cY, this.height);
+					const lam = this.solidFraction(phi);
+					const hw = this.heal * (0.25 + 0.75 * (1 - lam));
+					nX = nX * (1 - hw) + hw * tx;
+					nY = nY * (1 - hw) + hw * ty;
+				}
 				nxiX[k] = nX;
 				nxiY[k] = nY;
 			}
@@ -382,9 +454,12 @@ export class Solver {
 		for (let y = 0; y < H; y++)
 			for (let x = 0; x < W; x++) {
 				const k = y * W + x;
-				const [Fx, Fy] = this.solidForce(x, y, con);
+				const [Fx0, Fy0] = this.solidForce(x, y, con);
 				const f = this.pull(x, y);
-				const [rho, u, v] = this.hydroVelocity(x, y, Fx, Fy);
+				let [rho, u, v, Fx, Fy] = this.hydroVelocity(x, y, Fx0, Fy0);
+				// weak Rayleigh friction (momentum sink for anchored scenes)
+				u *= 1 - this.friction;
+				v *= 1 - this.friction;
 
 				const feq = equilibrium(rho, u, v);
 				const itau = 1 / this.tau, fw = 1 - 0.5 * itau;
@@ -413,7 +488,7 @@ export class Solver {
 				const [u, v] = this.velocity(x, y);
 				maxv = Math.max(maxv, Math.hypot(u, v));
 				const k = y * this.width + x;
-				const lam = this.solidFraction(this.levelSet(this.xiX[k], this.xiY[k]));
+				const lam = this.solidFraction(this.levelSetAt(this.xiX[k], this.xiY[k], x, y));
 				area += lam;
 				cxm += lam * unwrap(x, this.cx, this.width);
 				cym += lam * unwrap(y, this.cy, this.height);

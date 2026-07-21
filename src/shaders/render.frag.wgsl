@@ -44,7 +44,7 @@ fn main(input: Input) -> Output {
 
     // solid: shaded with its (deformed) reference-space grid
     let xi = xi_at(x);
-    let phi = level_set(xi);
+    let phi = level_set_at(xi, vec2<f32>(x));
     let lambda = solid_fraction(phi);
     if (lambda > 0.0) {
         let X = reference_coord(xi);

@@ -54,9 +54,12 @@ fn advect(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (any(gid.xy >= params.size)) { return; }
     let x = vec2<i32>(gid.xy);
 
-    let force = total_force(x, contraction());
+    var force = total_force(x, contraction());
     let m = moments(pull(x));
-    var v = (m.yz + 0.5 * force) / max(m.x, EPS);
+    let rho = max(m.x, EPS);
+    // cap the *acceleration*: near-vacuum cells must not be blown apart
+    force = clamp_mag(force, 0.2 * min(rho, 1.0));
+    var v = (m.yz + 0.5 * force) / rho;
     v = clamp_mag(v, 0.25);
 
     let c = xi_at(x);
@@ -81,8 +84,36 @@ fn advect(@builtin(global_invocation_id) gid: vec3<u32>) {
     // blur-zone edge erodes the thin smeared-xi filaments that would
     // otherwise condense into phantom solid fragments in the wake, while the
     // solid interior (phi < 0) is untouched.
-    let w = 0.3 * smoothstep(params.epsilon, 3.0 * params.epsilon, level_set(c));
+    let phi_here = level_set_at(c, vec2<f32>(x));
+    let w = 0.3 * smoothstep(params.epsilon, 3.0 * params.epsilon, phi_here);
     xi_new = mix(xi_new, 0.25 * (r1 + l1 + u1 + d1), w);
+
+    // Anchored scenes: the drive angle is known exactly, so the ideal
+    // (rigidly rotated) reference map is available analytically. Relax xi
+    // toward it - strongly in the fluid (substituting for the paper's
+    // extrapolation zone, curing phantom solids and interface smear) and
+    // weakly inside the solid (healing the slow inflation of the body while
+    // leaving elastic bending free).
+    if (params.shape != 0u && params.heal > 0.0) {
+        let s = vec2<f32>(params.size);
+        var d = vec2<f32>(x) - params.center;
+        d -= s * round(d / s);
+        var spin = 1.0;
+        if (params.shape == 2u) {
+            let rl = rotor_lattice(d);
+            d = rl.xy;
+            spin = rl.z;
+        }
+        let theta = spin * params.spin_angle * (1.0 - cos(params.spin_freq * f32(params.step)));
+        let ct = cos(theta);
+        let st = sin(theta);
+        // rotation about this cell's own rotor centre: (x - d) + R(-theta) d
+        var ideal = vec2<f32>(x) - d + vec2<f32>(d.x * ct + d.y * st, -d.x * st + d.y * ct);
+        ideal -= s * round((ideal - c) / s);
+        let lam = solid_fraction(phi_here);
+        let hw = params.heal * (0.25 + 0.75 * (1.0 - lam));
+        xi_new = mix(xi_new, ideal, hw);
+    }
 
     textureStore(xi_out, x, vec4<f32>(xi_new, 0.0, 0.0));
 }
@@ -143,7 +174,7 @@ fn total_force(x: vec2<i32>, con: f32) -> vec2<f32> {
         for (var dx = -1; dx <= 1; dx++) {
             let n = xi_near(x + vec2(dx, dy), ctr);
             xi[(dx + 1) + 3 * (dy + 1)] = n;
-            phi[(dx + 1) + 3 * (dy + 1)] = level_set(n);
+            phi[(dx + 1) + 3 * (dy + 1)] = level_set_at(n, vec2<f32>(x + vec2(dx, dy)));
         }
     }
     let dl = 0; let dd = 1; let dr = 2;
@@ -167,7 +198,7 @@ fn total_force(x: vec2<i32>, con: f32) -> vec2<f32> {
     var force = (sR[0] - sL[0]) + (sT[1] - sB[1]);
     force += anchor_force(vec2<f32>(x), xi[cc], phi[cc]);
     force += interaction_force(vec2<f32>(x), xi[cc]);
-    return clamp_mag(force, 0.1);
+    return force; // clamped against the local density by the caller
 }
 
 // Rotor drive (thesis section 3.3 / JCP paper section 4.2, lbrmt
@@ -182,28 +213,34 @@ fn anchor_force(p: vec2<f32>, xi_c: vec2<f32>, phi_c: f32) -> vec2<f32> {
     if (params.shape == 0u) { return vec2<f32>(0.0); }
     let s = vec2<f32>(params.size);
 
-    var xrel: vec2<f32>;
-    var Xrel: vec2<f32>;
+    var d = p - params.center;
+    d -= s * round(d / s);
+    var xrel = d;
     var spin = 1.0;
     if (params.shape == 2u) {
-        let here = rotor_lattice(p - params.center);
+        let here = rotor_lattice(d);
         xrel = here.xy;
         spin = here.z;
-        Xrel = rotor_lattice(reference_coord(xi_c)).xy;
-    } else {
-        xrel = p - params.center;
-        xrel -= s * round(xrel / s);
-        Xrel = reference_coord(xi_c);
     }
 
-    let pr = params.pivot_radius + params.epsilon;
-    if (dot(xrel, xrel) >= pr * pr) { return vec2<f32>(0.0); }
+    // smooth anchor footprint: full strength inside the pivot, fading over
+    // 2 epsilon (a hard cutoff ring concentrates stress and tears material)
+    let r = length(xrel);
+    let w = 1.0 - smoothstep(params.pivot_radius, params.pivot_radius + 2.0 * params.epsilon, r);
+    if (w <= 0.0) { return vec2<f32>(0.0); }
+
+    var Xrel = reference_coord(xi_c);
+    if (params.shape == 2u) { Xrel = rotor_lattice(Xrel).xy; }
 
     let theta = spin * params.spin_angle * (1.0 - cos(params.spin_freq * f32(params.step)));
     let ct = cos(theta);
     let st = sin(theta);
     let rotated = vec2<f32>(Xrel.x * ct - Xrel.y * st, Xrel.x * st + Xrel.y * ct);
-    return -0.01 * solid_fraction(phi_c) * (xrel - rotated);
+    // displacement-capped spring: the drive acts like a motor with slip, so
+    // a lagging rotor feels a bounded, gentle torque instead of a runaway
+    // pull that cavitates the fluid
+    let disp = clamp_mag(xrel - rotated, 4.0);
+    return -0.02 * solid_fraction(phi_c) * w * disp;
 }
 
 // Cursor forces.
@@ -254,14 +291,18 @@ fn collide(@builtin(global_invocation_id) gid: vec3<u32>) {
     let x = vec2<i32>(gid.xy);
 
     // Divergence of the solid stress (from the freshly advected xi) + user interaction
-    let force = total_force(x, contraction());
+    var force = total_force(x, contraction());
 
     // Forced BGK collision (Guo forcing, second order in velocity space)
     let f = pull(x);
     let m = moments(f);
     let rho = max(m.x, EPS);
+    force = clamp_mag(force, 0.2 * min(rho, 1.0));
     var v = (m.yz + 0.5 * force) / rho;
     v = clamp_mag(v, 0.25);
+    // weak Rayleigh friction: the periodic box has no walls to absorb the
+    // momentum that anchored rotors continuously pump into the fluid
+    v *= 1.0 - params.friction;
 
     let feq = equilibrium(rho, v);
     let itau = 1.0 / params.tau;

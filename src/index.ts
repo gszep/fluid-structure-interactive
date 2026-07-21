@@ -18,7 +18,6 @@ const isMobile = /Android|iPhone|iPad|iPod|Opera Mini|IEMobile|WPDesktop/i.test(
 );
 
 const SIM_SCALE = isMobile ? 3 : 2; // canvas pixels per simulation cell
-const SUBSTEPS = isMobile ? 2 : 8; // simulation steps per rendered frame
 const WORKGROUP_SIZE = 8;
 
 async function main(): Promise<void> {
@@ -35,44 +34,53 @@ async function main(): Promise<void> {
 	//   rotor             - one seven-pointed rotor, thesis section 3.3
 	//   flapper           - swimming actuated capsule
 	const scene =
-		new URLSearchParams(window.location.search).get("scene") ?? "rotors";
-	const shape = { flapper: 0, rotor: 1, rotors: 2 }[scene] ?? 2;
+		new URLSearchParams(window.location.search).get("scene") ?? "rotor";
+	const shape = { flapper: 0, rotor: 1, rotors: 2 }[scene] ?? 1;
+	// anchored rotors need a slow drive (tip speed well below the shear wave
+	// speed) but many substeps keep the wall-clock speed real-time
+	const SUBSTEPS = isMobile ? (shape === 0 ? 2 : 8) : shape === 0 ? 8 : 32;
 	const scale = Math.min(grid.width, grid.height);
 	// four-rotor scene (paper Fig. 9): each rotor lives in an L x L box with
 	// prong length 0.2L and pivot radius 0.025L; the lattice pitch is L/2 of
 	// the shorter screen dimension, so facing prongs exactly touch
 	const L = Math.min(grid.width, grid.height);
 	const muscleRadius = 0.018 * scale;
+	// Anchored-rotor parameters were tuned with the CUDA reference
+	// (cuda/lbrmt.cu): stable over 4+ full cycles at 448^2 with
+	// tau=0.8, G=0.05, kappa=0.15, T=54000, friction=heal=3e-4.
 	const settings = {
-		tau: shape === 0 ? 0.65 : 0.7, // LB relaxation time; nu = (tau - 0.5) / 3
-		// rotors need stiff prongs: tip speed must stay well below the shear
-		// wave speed sqrt(G) or the arms wind up and shear off
-		shearModulus: shape === 0 ? 0.06 : 0.1,
-		bulkModulus: shape === 0 ? 0.18 : 0.3, // kappa ~ 3G
+		tau: shape === 0 ? 0.65 : 0.8, // LB relaxation time; nu = (tau - 0.5) / 3
+		shearModulus: shape === 0 ? 0.06 : 0.05,
+		bulkModulus: shape === 0 ? 0.18 : 0.15, // kappa ~ 3G
 		epsilon: 2.0, // blur-zone half-width (cells)
 		center:
 			shape === 2
 				? [grid.width / 4, grid.height / 4]
 				: [grid.width / 2, grid.height / 2],
 		// flapper: capsule half-length; rotor: star tip radius;
-		// rotors: smooth-rotor prong length (0.2L, paper Fig. 9)
-		halfLength: shape === 2 ? 0.2 * L : shape === 1 ? 0.28 * scale : 0.1 * scale,
-		// flapper: capsule radius; rotors: prong end-cap radius
-		radius: shape === 2 ? 0.05 * L : 0.035 * scale,
+		// rotors: smooth-rotor prong length (slightly under 0.2L so adjacent
+		// prongs get close but do not weld - min-SDF has no object identity)
+		halfLength: shape === 2 ? 0.174 * L : shape === 1 ? 0.16 * scale : 0.1 * scale,
+		// flapper: capsule radius; rotor: star dilation (fattens the wedge arms,
+		// whose bending stiffness goes as thickness^3); rotors: end-cap radius
+		radius: shape === 2 ? 0.04 * L : shape === 1 ? 0.04 * scale : 0.035 * scale,
 		muscleHalfLength: 0.06 * scale,
 		// flapper: muscle radius; rotors: prong fillet radius
-		muscleRadius: shape === 2 ? 0.05 * L : muscleRadius,
+		muscleRadius: shape === 2 ? 0.04 * L : muscleRadius,
 		actuationAmp: Math.log(2.0) / muscleRadius, // max active stretch 2x
 		actuationFreq: (2 * Math.PI) / 500, // one stroke every 500 steps
 		shape: shape,
-		pivotRadius: shape === 2 ? 0.025 * L : 0.04 * scale,
+		pivotRadius: 0.1 * (shape === 2 ? L : scale),
 		spinAngle: Math.PI, // theta(t) = spinAngle * (1 - cos(spinFreq t))
-		// one revolution out and one back per cycle; slow enough for the
-		// elastic prongs to follow the drive
-		spinFreq: (2 * Math.PI) / (shape === 2 ? 20000 : 3000),
+		// one revolution out and one back per cycle; the tip speed
+		// (tip radius * spinAngle * spinFreq) must stay well below the shear
+		// wave speed sqrt(G), or the arms wind up and shear off
+		spinFreq: (2 * Math.PI) / 54000,
+		friction: shape === 0 ? 0 : 3e-4,
+		heal: shape === 0 ? 0 : 3e-4,
 	};
 
-	const paramsData = new ArrayBuffer(80);
+	const paramsData = new ArrayBuffer(96);
 	const paramsU32 = new Uint32Array(paramsData);
 	const paramsF32 = new Float32Array(paramsData);
 	paramsU32.set([grid.width, grid.height, 0, SUBSTEPS], 0);
@@ -94,7 +102,13 @@ async function main(): Promise<void> {
 	);
 	paramsU32.set([settings.shape], 16);
 	paramsF32.set(
-		[settings.pivotRadius, settings.spinAngle, settings.spinFreq],
+		[
+			settings.pivotRadius,
+			settings.spinAngle,
+			settings.spinFreq,
+			settings.friction,
+			settings.heal,
+		],
 		17
 	);
 
