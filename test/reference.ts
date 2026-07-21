@@ -105,7 +105,7 @@ export class Solver {
 			actuationAmp: 0,
 			actuationFreq: 2 * Math.PI / 500,
 			forceClamp: 0.1,
-			velocityClamp: 0.35,
+			velocityClamp: 0.25,
 			externalForce: null, // (x, y, step) => [Fx, Fy]
 		};
 		Object.assign(this, defaults, params);
@@ -290,7 +290,7 @@ export class Solver {
 				let nY = cY - (u * dYdx + v * dYdy);
 				// far-field smoothing (smoothstep(2e, 6e, phi) * 0.1)
 				const phi = this.levelSet(cX, cY);
-				const t = Math.min(1, Math.max(0, (phi - 2 * this.epsilon) / (4 * this.epsilon)));
+				const t = Math.min(1, Math.max(0, (phi - this.epsilon) / (2 * this.epsilon)));
 				const w = 0.1 * t * t * (3 - 2 * t);
 				nX = nX * (1 - w) + w * 0.25 * (XR1 + XL1 + XU1 + XD1);
 				nY = nY * (1 - w) + w * 0.25 * (YR1 + YL1 + YU1 + YD1);

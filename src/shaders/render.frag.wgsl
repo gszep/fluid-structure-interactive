@@ -37,7 +37,7 @@ fn main(input: Input) -> Output {
     let speed = length(velocity(x));
 
     var color = vec3<f32>(0.03, 0.04, 0.06);
-    let w = clamp(vort * 300.0, -1.0, 1.0);
+    let w = clamp(vort * 150.0, -1.0, 1.0);
     color += max(w, 0.0) * vec3<f32>(0.9, 0.25, 0.1);
     color += max(-w, 0.0) * vec3<f32>(0.1, 0.4, 0.9);
     color += min(speed * 3.0, 0.5) * vec3<f32>(0.25, 0.25, 0.3);

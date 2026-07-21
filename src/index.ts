@@ -33,9 +33,9 @@ async function main(): Promise<void> {
 	const scale = Math.min(grid.width, grid.height);
 	const muscleRadius = 0.018 * scale;
 	const settings = {
-		tau: 0.6, // LB relaxation time; viscosity nu = (tau - 0.5) / 3
-		shearModulus: 0.04, // G (LB units); shear wave speed = sqrt(G / rho)
-		bulkModulus: 0.12, // kappa ~ 3G
+		tau: 0.65, // LB relaxation time; viscosity nu = (tau - 0.5) / 3
+		shearModulus: 0.06, // G (LB units); shear wave speed = sqrt(G / rho)
+		bulkModulus: 0.18, // kappa ~ 3G
 		epsilon: 2.0, // blur-zone half-width (cells)
 		center: [grid.width / 2, grid.height / 2],
 		halfLength: 0.1 * scale,
@@ -226,7 +226,45 @@ async function main(): Promise<void> {
 	let current = 0;
 	let step = 0;
 
+	// staging buffer to read back the reference map under a grab click:
+	// the grabbed material point is identified by its reference coordinates
+	const grabStaging = device.createBuffer({
+		label: "Grab Staging Buffer",
+		size: 256,
+		usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+	});
+	let grabInFlight = false;
+
+	function requestGrab(at: [number, number]) {
+		grabInFlight = true;
+		const encoder = device.createCommandEncoder();
+		encoder.copyTextureToBuffer(
+			{
+				texture: xi[current],
+				origin: {
+					x: Math.min(Math.max(Math.floor(at[0]), 0), grid.width - 1),
+					y: Math.min(Math.max(Math.floor(at[1]), 0), grid.height - 1),
+				},
+			},
+			{ buffer: grabStaging, bytesPerRow: 256 },
+			{ width: 1, height: 1 }
+		);
+		device.queue.submit([encoder.finish()]);
+		grabStaging.mapAsync(GPUMapMode.READ).then(() => {
+			const xiGrab = new Float32Array(grabStaging.getMappedRange(0, 8));
+			interactions.data[6] = xiGrab[0];
+			interactions.data[7] = xiGrab[1];
+			// activate only if the button is still held
+			interactions.data[3] = interactions.data[2] > 0 ? 1 : 0;
+			grabStaging.unmap();
+			grabInFlight = false;
+		});
+	}
+
 	function frame() {
+		interactions.update();
+		const grabAt = interactions.consumeGrabRequest();
+		if (grabAt && !grabInFlight) requestGrab(grabAt);
 		paramsU32[2] = step;
 		device.queue.writeBuffer(paramsBuffer, 0, paramsData);
 		device.queue.writeBuffer(interactions.buffer, 0, interactions.data);

@@ -87,7 +87,8 @@ function createFieldTexture(
 		usage:
 			GPUTextureUsage.TEXTURE_BINDING |
 			GPUTextureUsage.STORAGE_BINDING |
-			GPUTextureUsage.COPY_DST,
+			GPUTextureUsage.COPY_DST |
+			GPUTextureUsage.COPY_SRC,
 	});
 }
 
@@ -108,10 +109,12 @@ function writeFieldTexture(
 }
 
 /**
- * Cursor interactions. Returns a uniform buffer of [x, y, signedRadius, pad]
- * in simulation-grid coordinates. signedRadius is positive while pushing
- * (left click / one finger), negative while pulling (right click / two
- * fingers) and zero when inactive. Scroll adjusts the radius.
+ * Cursor interactions. Returns a uniform buffer laid out as
+ * [x, y, signedRadius, pad, vx, vy, pad, pad] in simulation-grid coordinates.
+ * signedRadius is positive while pushing (left click / one finger), negative
+ * while pulling (right click / two fingers) and zero when inactive. (vx, vy)
+ * is the smoothed cursor velocity, used to drag the fluid and solid around.
+ * Scroll adjusts the radius. Call update() once per frame.
  */
 function setupInteractions(
 	device: GPUDevice,
@@ -121,13 +124,24 @@ function setupInteractions(
 ): {
 	buffer: GPUBuffer;
 	data: Float32Array;
+	update: () => void;
+	consumeGrabRequest: () => [number, number] | null;
 } {
-	const data = new Float32Array(4);
+	const data = new Float32Array(8);
 	let sign = 1;
+	let previous: [number, number] | null = null;
+	let grabRequest: [number, number] | null = null;
+	// raw cursor position; while grabbing, data[0..1] is a rate-limited
+	// towpoint chasing it, so the solid is never yanked faster than it can
+	// physically follow (it would tear apart)
+	let raw: [number, number] = [0, 0];
 
 	const setPosition = (x: number, y: number) => {
-		data[0] = (x / canvas.width) * grid.width;
-		data[1] = (y / canvas.height) * grid.height;
+		raw = [(x / canvas.width) * grid.width, (y / canvas.height) * grid.height];
+		if (data[3] === 0) {
+			data[0] = raw[0];
+			data[1] = raw[1];
+		}
 	};
 
 	canvas.addEventListener("contextmenu", (event) => event.preventDefault());
@@ -148,6 +162,7 @@ function setupInteractions(
 		sign = event.button === 2 ? -1 : 1;
 		setPosition(event.offsetX, event.offsetY);
 		data[2] = sign * radius;
+		if (sign > 0) grabRequest = [data[0], data[1]];
 	});
 	canvas.addEventListener(
 		"touchstart",
@@ -155,6 +170,7 @@ function setupInteractions(
 			sign = event.touches.length > 1 ? -1 : 1;
 			setPosition(event.touches[0].clientX, event.touches[0].clientY);
 			data[2] = sign * radius;
+			if (sign > 0) grabRequest = [data[0], data[1]];
 		},
 		{ passive: true }
 	);
@@ -162,6 +178,8 @@ function setupInteractions(
 	["mouseup", "mouseleave", "touchend", "touchcancel"].forEach((type) => {
 		canvas.addEventListener(type, () => {
 			data[2] = 0;
+			data[3] = 0; // release the grab
+			grabRequest = null;
 		});
 	});
 
@@ -181,7 +199,42 @@ function setupInteractions(
 		usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
 	});
 
-	return { buffer: buffer, data: data };
+	// per-frame: advance the towpoint and the smoothed cursor velocity
+	const update = () => {
+		if (data[3] > 0) {
+			const maxStep = 2; // cells per frame
+			const dx = raw[0] - data[0];
+			const dy = raw[1] - data[1];
+			const dist = Math.hypot(dx, dy);
+			const scale = dist > maxStep ? maxStep / dist : 1;
+			data[0] += dx * scale;
+			data[1] += dy * scale;
+		} else {
+			data[0] = raw[0];
+			data[1] = raw[1];
+		}
+		if (previous && data[2] !== 0) {
+			data[4] = 0.6 * data[4] + 0.4 * (data[0] - previous[0]);
+			data[5] = 0.6 * data[5] + 0.4 * (data[1] - previous[1]);
+		} else {
+			data[4] = 0;
+			data[5] = 0;
+		}
+		previous = [data[0], data[1]];
+	};
+
+	const consumeGrabRequest = (): [number, number] | null => {
+		const request = grabRequest;
+		grabRequest = null;
+		return request;
+	};
+
+	return {
+		buffer: buffer,
+		data: data,
+		update: update,
+		consumeGrabRequest: consumeGrabRequest,
+	};
 }
 
 /** Replace `#import` directives by prepending the included source files. */

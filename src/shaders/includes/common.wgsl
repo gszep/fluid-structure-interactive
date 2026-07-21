@@ -45,6 +45,9 @@ struct Params {
 struct Interaction {
     position: vec2<f32>,       // cursor position (grid cells)
     size: f32,                 // signed radius; 0 = inactive
+    grab_active: f32,          // 1 while a grab anchor is held
+    velocity: vec2<f32>,       // smoothed cursor velocity (cells / frame)
+    grab_ref: vec2<f32>,       // reference-map coords of the grabbed material
 };
 
 // Periodic wrap of integer grid coordinates.

@@ -57,7 +57,7 @@ fn advect(@builtin(global_invocation_id) gid: vec3<u32>) {
     let force = total_force(x, contraction());
     let m = moments(pull(x));
     var v = (m.yz + 0.5 * force) / max(m.x, EPS);
-    v = clamp_mag(v, 0.35);
+    v = clamp_mag(v, 0.25);
 
     let c = xi_at(x);
     let r1 = xi_near(x + vec2(1, 0), c);
@@ -76,9 +76,12 @@ fn advect(@builtin(global_invocation_id) gid: vec3<u32>) {
 
     var xi_new = c - (v.x * ddx + v.y * ddy);
 
-    // Far from the solid the reference map is never used for stresses; gently
-    // diffuse it there to keep the field smooth and bounded.
-    let w = 0.1 * smoothstep(2.0 * params.epsilon, 6.0 * params.epsilon, level_set(c));
+    // Outside the solid the reference map is never used for stresses; diffuse
+    // it there to keep the field smooth and bounded. Starting right at the
+    // blur-zone edge erodes the thin smeared-xi filaments that would
+    // otherwise condense into phantom solid fragments in the wake, while the
+    // solid interior (phi < 0) is untouched.
+    let w = 0.3 * smoothstep(params.epsilon, 3.0 * params.epsilon, level_set(c));
     xi_new = mix(xi_new, 0.25 * (r1 + l1 + u1 + d1), w);
 
     textureStore(xi_out, x, vec4<f32>(xi_new, 0.0, 0.0));
@@ -159,20 +162,50 @@ fn total_force(x: vec2<i32>, con: f32) -> vec2<f32> {
         0.5 * (xi[uu] + xi[cc]), 0.5 * (phi[uu] + phi[cc]), con);
 
     var force = (sR[0] - sL[0]) + (sT[1] - sB[1]);
-    force += interaction_force(vec2<f32>(x));
+    force += interaction_force(vec2<f32>(x), xi[cc]);
     return clamp_mag(force, 0.1);
 }
 
-// Radial push (left click / one finger) or pull (right click / two fingers).
-fn interaction_force(p: vec2<f32>) -> vec2<f32> {
+// Cursor forces.
+//  - Left click-drag-release on the solid grabs it: material whose reference
+//    map lies near the grabbed material point (grab_ref) is pulled toward the
+//    cursor by a spring. The anchor lives in reference space, so the grip
+//    sticks to the material even as it deforms and translates.
+//  - Otherwise: drag injects momentum along the cursor motion, and a press
+//    pushes (left) or pulls (right) radially.
+fn interaction_force(p: vec2<f32>, xi_c: vec2<f32>) -> vec2<f32> {
     let a = abs(interaction.size);
     if (a < 1.0) { return vec2<f32>(0.0); }
     let s = vec2<f32>(params.size);
     var d = p - interaction.position;
     d -= s * round(d / s);
     let r = length(d);
-    if (r >= a || r < 1e-3) { return vec2<f32>(0.0); }
-    return (0.02 * sign(interaction.size) * exp(-r * r / a) / r) * d;
+
+    let grabbing = interaction.grab_active > 0.5
+        && interaction.size > 0.0
+        && level_set(interaction.grab_ref) < params.epsilon;
+
+    if (grabbing) {
+        // tow the whole body: the grip is body-scale in *reference* space, so
+        // the force is nearly uniform over the solid and it moves as a whole
+        // (a localized grip would drag one patch through the body and tear
+        // it). Deformation while towing comes from the fluid drag.
+        var dref = xi_c - interaction.grab_ref;
+        dref -= s * round(dref / s);
+        let width = params.half_length * params.half_length;
+        let grip = exp(-dot(dref, dref) / (2.0 * width));
+        return 0.01 * grip * clamp_mag(-d, 2.0);
+    }
+
+    if (r >= a) { return vec2<f32>(0.0); }
+    let blob = exp(-r * r / a);
+    // drag along the cursor velocity
+    var force = 0.01 * blob * clamp_mag(interaction.velocity, 5.0);
+    // radial push/pull
+    if (r > 1e-3) {
+        force += (0.02 * sign(interaction.size) * blob / r) * d;
+    }
+    return force;
 }
 
 @compute @workgroup_size(8, 8)
@@ -188,7 +221,7 @@ fn collide(@builtin(global_invocation_id) gid: vec3<u32>) {
     let m = moments(f);
     let rho = max(m.x, EPS);
     var v = (m.yz + 0.5 * force) / rho;
-    v = clamp_mag(v, 0.35);
+    v = clamp_mag(v, 0.25);
 
     let feq = equilibrium(rho, v);
     let itau = 1.0 / params.tau;
