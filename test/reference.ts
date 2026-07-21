@@ -19,6 +19,34 @@ export function capsule(px: number, py: number, hl: number, r: number): number {
 	return (qx < 0 ? Math.abs(py) : Math.hypot(qx, py)) - r;
 }
 
+/** Three-pronged smooth rotor (lbrmt obj_smooth_rotor::phi). */
+export function smoothRotor(px: number, py: number, l: number, r: number, s: number): number {
+	let X = px;
+	let Y = Math.abs(py);
+	if (X * -0.8660254 + Y * 0.5 > 0) {
+		const yy = Math.abs(X * -0.8660254 + Y * -0.5);
+		X = X * -0.5 + Y * 0.8660254;
+		Y = yy;
+	}
+	const q = (r + s) * 0.57735027;
+	if (X > l) return Math.hypot(X - l, Y) - r;
+	if (X > q) return Y - r;
+	return s - Math.hypot(X - q, Y - r - s);
+}
+
+/** Seven-pointed star with tips at distance cr (lbrmt obj_seven_point::phi). */
+export function sevenStar(px: number, py: number, cr: number): number {
+	const fac = (2 * Math.PI) / 7;
+	let theta = Math.abs(Math.atan2(py, px));
+	const R = Math.hypot(px, py);
+	theta = Math.abs(theta - fac * Math.round(theta / fac));
+	const X = R * Math.cos(theta) - cr;
+	const Y = R * Math.sin(theta);
+	const c = Math.cos(0.25 * fac);
+	const s = Math.sin(0.25 * fac);
+	return X * c - Y * s > 0 ? Math.hypot(X, Y) : Y * c + X * s;
+}
+
 export function eno2(v0: number, v1: number, v2: number, v3: number): number {
 	const a = Math.abs(v0 - 2 * v1 + v2);
 	const b = Math.abs(v1 - 2 * v2 + v3);
@@ -53,6 +81,10 @@ export interface SolverParams {
 	forceClamp?: number;
 	velocityClamp?: number;
 	externalForce?: ExternalForce | null;
+	shape?: number;
+	pivotRadius?: number;
+	spinAngle?: number;
+	spinFreq?: number;
 }
 
 export type ExternalForce = (x: number, y: number, step: number) => [number, number];
@@ -83,6 +115,10 @@ export class Solver {
 	forceClamp!: number;
 	velocityClamp!: number;
 	externalForce!: ExternalForce | null;
+	shape!: number;
+	pivotRadius!: number;
+	spinAngle!: number;
+	spinFreq!: number;
 	xiX!: Float32Array;
 	xiY!: Float32Array;
 	f!: Float32Array[];
@@ -107,6 +143,10 @@ export class Solver {
 			forceClamp: 0.1,
 			velocityClamp: 0.25,
 			externalForce: null, // (x, y, step) => [Fx, Fy]
+			shape: 0, // 0 = capsule flapper, 1 = seven-pointed rotor
+			pivotRadius: 4,
+			spinAngle: Math.PI,
+			spinFreq: (2 * Math.PI) / 3000,
 		};
 		Object.assign(this, defaults, params);
 
@@ -150,8 +190,22 @@ export class Solver {
 		return [unwrap(X - this.cx, 0, this.width), unwrap(Y - this.cy, 0, this.height)];
 	}
 
+	/** Offset to the nearest rotor centre in the 2x2 lattice, and that row's
+	 * spin direction (top row counter-clockwise, bottom clockwise). */
+	rotorLattice(px: number, py: number): [number, number, number] {
+		const pitchX = this.width / 2, pitchY = this.height / 2;
+		const kx = Math.round(px / pitchX), ky = Math.round(py / pitchY);
+		const row = ((ky % 2) + 2) % 2;
+		return [px - kx * pitchX, py - ky * pitchY, row === 1 ? -1 : 1];
+	}
+
 	levelSet(X: number, Y: number): number {
-		const [a, b] = this.refCoord(X, Y);
+		let [a, b] = this.refCoord(X, Y);
+		if (this.shape === 1) return sevenStar(a, b, this.halfLength);
+		if (this.shape === 2) {
+			const [ra, rb] = this.rotorLattice(a, b);
+			return smoothRotor(ra, rb, this.halfLength, this.radius, this.muscleRadius);
+		}
 		return capsule(a, b, this.halfLength, this.radius);
 	}
 
@@ -200,10 +254,12 @@ export class Solver {
 		if (Math.abs(det) < 1e-3) return [[0, 0], [0, 0]];
 		let F11 = Yy / det, F12 = -Xy / det, F21 = -Yx / det, F22 = Xx / det;
 
-		const [Xr, Yr] = this.refCoord(Xe, Ye);
-		const muscle = this.solidFraction(capsule(Xr, Yr, this.muscleHalfLength, this.muscleRadius));
-		const fac = Math.min(2, Math.max(0.5, Math.exp(con * Yr * muscle)));
-		F11 *= fac; F21 *= fac; F12 /= fac; F22 /= fac;
+		if (this.shape === 0) {
+			const [Xr, Yr] = this.refCoord(Xe, Ye);
+			const muscle = this.solidFraction(capsule(Xr, Yr, this.muscleHalfLength, this.muscleRadius));
+			const fac = Math.min(2, Math.max(0.5, Math.exp(con * Yr * muscle)));
+			F11 *= fac; F21 *= fac; F12 /= fac; F22 /= fac;
+		}
 
 		const J = Math.min(10, Math.max(0.1, 1 / det));
 		const B11 = F11 * F11 + F12 * F12;
@@ -247,6 +303,27 @@ export class Solver {
 
 		let Fx = (sR[0][0] - sL[0][0]) + (sT[0][1] - sB[0][1]);
 		let Fy = (sR[1][0] - sL[1][0]) + (sT[1][1] - sB[1][1]);
+		if (this.shape >= 1) {
+			// rotor drive: spring toward the rotated reference position
+			let xrelX = unwrap(x - this.cx, 0, this.width);
+			let xrelY = unwrap(y - this.cy, 0, this.height);
+			let [X, Y] = this.refCoord(cX, cY);
+			let spin = 1;
+			if (this.shape === 2) {
+				[xrelX, xrelY, spin] = this.rotorLattice(xrelX, xrelY);
+				[X, Y] = this.rotorLattice(X, Y);
+			}
+			const pr = this.pivotRadius + this.epsilon;
+			if (xrelX * xrelX + xrelY * xrelY < pr * pr) {
+				const theta = spin * this.spinAngle * (1 - Math.cos(this.spinFreq * this.step_));
+				const ct = Math.cos(theta), st = Math.sin(theta);
+				const rx = X * ct - Y * st;
+				const ry = X * st + Y * ct;
+				const lam = this.solidFraction(this.levelSet(cX, cY));
+				Fx += -0.01 * lam * (xrelX - rx);
+				Fy += -0.01 * lam * (xrelY - ry);
+			}
+		}
 		if (this.externalForce) {
 			const [ex, ey] = this.externalForce(x, y, this.step_);
 			Fx += ex;

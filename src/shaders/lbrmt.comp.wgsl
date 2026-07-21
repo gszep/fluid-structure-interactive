@@ -114,13 +114,16 @@ fn edge_stress(jac: mat2x2<f32>, xi_edge: vec2<f32>, phi_edge: f32, con: f32) ->
         vec2<f32>(-jac[1][0], jac[0][0]),
     ) * (1.0 / det);
 
-    // Active deformation: area-preserving stretch along the body axis, graded
-    // across the thickness (X.y) so the body bends.
-    let X = reference_coord(xi_edge);
-    let muscle = solid_fraction(capsule(X, params.muscle_half_length, params.muscle_radius));
-    let fac = clamp(exp(con * X.y * muscle), 0.5, 2.0);
-    F[0] *= fac;
-    F[1] *= 1.0 / fac;
+    // Active deformation (capsule flapper only): area-preserving stretch
+    // along the body axis, graded across the thickness (X.y) so the body
+    // bends. The rotor is driven by an anchor force instead.
+    if (params.shape == 0u) {
+        let X = reference_coord(xi_edge);
+        let muscle = solid_fraction(capsule(X, params.muscle_half_length, params.muscle_radius));
+        let fac = clamp(exp(con * X.y * muscle), 0.5, 2.0);
+        F[0] *= fac;
+        F[1] *= 1.0 / fac;
+    }
 
     // Compressible neo-Hookean constitutive law (plane strain)
     let J = clamp(1.0 / det, 0.1, 10.0);
@@ -162,8 +165,45 @@ fn total_force(x: vec2<i32>, con: f32) -> vec2<f32> {
         0.5 * (xi[uu] + xi[cc]), 0.5 * (phi[uu] + phi[cc]), con);
 
     var force = (sR[0] - sL[0]) + (sT[1] - sB[1]);
+    force += anchor_force(vec2<f32>(x), xi[cc], phi[cc]);
     force += interaction_force(vec2<f32>(x), xi[cc]);
     return clamp_mag(force, 0.1);
+}
+
+// Rotor drive (thesis section 3.3 / JCP paper section 4.2, lbrmt
+// obj_seven_point::accel): material in a small pivot region around each
+// rotor centre is pulled toward its *rotated* reference position by a
+// spring, with the target angle swinging
+// theta(t) = spin_angle * (1 - cos(spin_freq * t)). With spin_angle = pi the
+// rotor makes a full 2pi revolution in the first half period, then reverses
+// for a full revolution back, twisting its arms through the fluid. In the
+// 2x2 lattice the top row turns counter-clockwise and the bottom clockwise.
+fn anchor_force(p: vec2<f32>, xi_c: vec2<f32>, phi_c: f32) -> vec2<f32> {
+    if (params.shape == 0u) { return vec2<f32>(0.0); }
+    let s = vec2<f32>(params.size);
+
+    var xrel: vec2<f32>;
+    var Xrel: vec2<f32>;
+    var spin = 1.0;
+    if (params.shape == 2u) {
+        let here = rotor_lattice(p - params.center);
+        xrel = here.xy;
+        spin = here.z;
+        Xrel = rotor_lattice(reference_coord(xi_c)).xy;
+    } else {
+        xrel = p - params.center;
+        xrel -= s * round(xrel / s);
+        Xrel = reference_coord(xi_c);
+    }
+
+    let pr = params.pivot_radius + params.epsilon;
+    if (dot(xrel, xrel) >= pr * pr) { return vec2<f32>(0.0); }
+
+    let theta = spin * params.spin_angle * (1.0 - cos(params.spin_freq * f32(params.step)));
+    let ct = cos(theta);
+    let st = sin(theta);
+    let rotated = vec2<f32>(Xrel.x * ct - Xrel.y * st, Xrel.x * st + Xrel.y * ct);
+    return -0.01 * solid_fraction(phi_c) * (xrel - rotated);
 }
 
 // Cursor forces.

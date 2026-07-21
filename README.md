@@ -2,7 +2,13 @@
 
 A real-time WebGPU implementation of the **lattice-Boltzmann reference map technique (LBRMT)** — a fully-Eulerian fluid–structure interaction method — tuned for interactive play rather than biophysical accuracy.
 
-A soft neo-Hookean solid (currently a capsule "flapper" with a periodically actuated muscle region) swims through a D2Q9 lattice-Boltzmann fluid. Poke it with the mouse: left-click pushes, right-click pulls, scroll changes the interaction radius.
+Soft neo-Hookean solids move through a D2Q9 lattice-Boltzmann fluid. Interact with the mouse: **left-click-drag on a solid grabs and tows it**, left-click in fluid pushes, right-click pulls, scroll changes the interaction radius.
+
+Scenes (`?scene=` URL parameter):
+
+- **`rotors`** (default) — four anchored three-pronged rotors in contact, rows spinning in opposite directions through a full revolution and back (JCP paper Fig. 9)
+- **`rotor`** — a single seven-pointed star rotor twisted by an oscillatory anchor force (thesis section 3.3)
+- **`flapper`** — a capsule with a periodically actuated muscle region that bends and swims
 
 ## Method
 

@@ -30,23 +30,49 @@ async function main(): Promise<void> {
 	};
 
 	// ------------------------- simulation parameters -------------------------
+	// scenes:
+	//   rotors  (default) - four rotors in contact, JCP paper section 4.2
+	//   rotor             - one seven-pointed rotor, thesis section 3.3
+	//   flapper           - swimming actuated capsule
+	const scene =
+		new URLSearchParams(window.location.search).get("scene") ?? "rotors";
+	const shape = { flapper: 0, rotor: 1, rotors: 2 }[scene] ?? 2;
 	const scale = Math.min(grid.width, grid.height);
+	// four-rotor scene (paper Fig. 9): each rotor lives in an L x L box with
+	// prong length 0.2L and pivot radius 0.025L; the lattice pitch is L/2 of
+	// the shorter screen dimension, so facing prongs exactly touch
+	const L = Math.min(grid.width, grid.height);
 	const muscleRadius = 0.018 * scale;
 	const settings = {
-		tau: 0.65, // LB relaxation time; viscosity nu = (tau - 0.5) / 3
-		shearModulus: 0.06, // G (LB units); shear wave speed = sqrt(G / rho)
-		bulkModulus: 0.18, // kappa ~ 3G
+		tau: shape === 0 ? 0.65 : 0.7, // LB relaxation time; nu = (tau - 0.5) / 3
+		// rotors need stiff prongs: tip speed must stay well below the shear
+		// wave speed sqrt(G) or the arms wind up and shear off
+		shearModulus: shape === 0 ? 0.06 : 0.1,
+		bulkModulus: shape === 0 ? 0.18 : 0.3, // kappa ~ 3G
 		epsilon: 2.0, // blur-zone half-width (cells)
-		center: [grid.width / 2, grid.height / 2],
-		halfLength: 0.1 * scale,
-		radius: 0.035 * scale,
+		center:
+			shape === 2
+				? [grid.width / 4, grid.height / 4]
+				: [grid.width / 2, grid.height / 2],
+		// flapper: capsule half-length; rotor: star tip radius;
+		// rotors: smooth-rotor prong length (0.2L, paper Fig. 9)
+		halfLength: shape === 2 ? 0.2 * L : shape === 1 ? 0.28 * scale : 0.1 * scale,
+		// flapper: capsule radius; rotors: prong end-cap radius
+		radius: shape === 2 ? 0.05 * L : 0.035 * scale,
 		muscleHalfLength: 0.06 * scale,
-		muscleRadius: muscleRadius,
+		// flapper: muscle radius; rotors: prong fillet radius
+		muscleRadius: shape === 2 ? 0.05 * L : muscleRadius,
 		actuationAmp: Math.log(2.0) / muscleRadius, // max active stretch 2x
 		actuationFreq: (2 * Math.PI) / 500, // one stroke every 500 steps
+		shape: shape,
+		pivotRadius: shape === 2 ? 0.025 * L : 0.04 * scale,
+		spinAngle: Math.PI, // theta(t) = spinAngle * (1 - cos(spinFreq t))
+		// one revolution out and one back per cycle; slow enough for the
+		// elastic prongs to follow the drive
+		spinFreq: (2 * Math.PI) / (shape === 2 ? 20000 : 3000),
 	};
 
-	const paramsData = new ArrayBuffer(64);
+	const paramsData = new ArrayBuffer(80);
 	const paramsU32 = new Uint32Array(paramsData);
 	const paramsF32 = new Float32Array(paramsData);
 	paramsU32.set([grid.width, grid.height, 0, SUBSTEPS], 0);
@@ -65,6 +91,11 @@ async function main(): Promise<void> {
 			settings.actuationFreq,
 		],
 		4
+	);
+	paramsU32.set([settings.shape], 16);
+	paramsF32.set(
+		[settings.pivotRadius, settings.spinAngle, settings.spinFreq],
+		17
 	);
 
 	const paramsBuffer = device.createBuffer({

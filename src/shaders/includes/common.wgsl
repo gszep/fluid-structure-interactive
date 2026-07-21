@@ -40,6 +40,10 @@ struct Params {
     muscle_radius: f32,        // actuated region radius
     actuation_amp: f32,        // log(max stretch) / muscle_radius
     actuation_freq: f32,       // radians per step
+    shape: u32,                // 0 = flapper, 1 = one rotor, 2 = 2x2 rotor lattice
+    pivot_radius: f32,         // rotor: radius of the anchored pivot region
+    spin_angle: f32,           // rotor: half of the maximum spin angle
+    spin_freq: f32,            // rotor: angular velocity of the spin drive
 };
 
 struct Interaction {
@@ -81,10 +85,66 @@ fn capsule(p: vec2<f32>, hl: f32, r: f32) -> f32 {
     return select(length(vec2<f32>(qx, p.y)), abs(p.y), qx < 0.0) - r;
 }
 
+// Signed distance of a seven-pointed star with tips at distance cr
+// (obj_seven_point::phi in the lbrmt reference code).
+fn seven_star(p: vec2<f32>, cr: f32) -> f32 {
+    let fac = 2.0 * PI / 7.0;
+    var theta = abs(atan2(p.y, p.x));
+    let R = length(p);
+    theta = abs(theta - fac * round(theta / fac));
+    let X = R * cos(theta) - cr;
+    let Y = R * sin(theta);
+    let c = cos(0.25 * fac);
+    let s = sin(0.25 * fac);
+    return select(Y * c + X * s, length(vec2<f32>(X, Y)), X * c - Y * s > 0.0);
+}
+
+// 2x2 rotor lattice (JCP paper section 4.2): rotors sit at half-period
+// spacing starting from params.center. Returns the offset to the nearest
+// rotor centre (xy) and the spin direction of that rotor's row (z):
+// the top row turns counter-clockwise, the bottom row clockwise.
+fn rotor_lattice(p: vec2<f32>) -> vec3<f32> {
+    let pitch = 0.5 * vec2<f32>(params.size);
+    let k = round(p / pitch);
+    let rel = p - k * pitch;
+    let row = ((i32(k.y) % 2) + 2) % 2;
+    return vec3<f32>(rel, select(1.0, -1.0, row == 1));
+}
+
+// Three-pronged smooth rotor (obj_smooth_rotor::phi in the lbrmt code):
+// prongs of length l with end caps of radius r, filleted with radius s.
+// Used for the four-rotor contact scene (JCP paper Fig. 9) - the fat prongs
+// survive full revolutions where the thin star arms would wind up and shear.
+fn smooth_rotor(p: vec2<f32>, l: f32, r: f32, s: f32) -> f32 {
+    var X = p.x;
+    var Y = abs(p.y);
+    // fold the three-fold symmetry into one prong sector
+    if (X * -0.8660254 + Y * 0.5 > 0.0) {
+        let yy = abs(X * -0.8660254 + Y * -0.5);
+        X = X * -0.5 + Y * 0.8660254;
+        Y = yy;
+    }
+    let q = (r + s) * 0.57735027; // (r+s)/sqrt(3)
+    if (X > l) { return length(vec2<f32>(X - l, Y)) - r; }
+    if (X > q) { return Y - r; }
+    return s - length(vec2<f32>(X - q, Y - r - s));
+}
+
+fn sdf_shape(p: vec2<f32>) -> f32 {
+    if (params.shape == 1u) {
+        return seven_star(p, params.half_length);
+    }
+    if (params.shape == 2u) {
+        // muscle_radius doubles as the fillet radius here
+        return smooth_rotor(rotor_lattice(p).xy, params.half_length, params.radius, params.muscle_radius);
+    }
+    return capsule(p, params.half_length, params.radius);
+}
+
 // Level set of the solid, evaluated through the reference map:
 // phi < 0 inside the solid, phi > 0 in the fluid.
 fn level_set(xi: vec2<f32>) -> f32 {
-    return capsule(reference_coord(xi), params.half_length, params.radius);
+    return sdf_shape(reference_coord(xi));
 }
 
 // Smoothed Heaviside: 1 in the solid, 0 in the fluid,
