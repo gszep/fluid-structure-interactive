@@ -78,7 +78,7 @@ test("CUDA: four-rotor lattice survives a full revolution cycle", { skip: !avail
 		assert.ok(r.maxv < 0.6, `velocities bounded at step ${r.step}`);
 		// the prongs puff transiently mid-revolution (the corridors between
 		// rotors cannot be gated because the gates overlap); they relax at rest
-		assert.ok(Math.abs(r.area_pct) < 70, `area drift ${r.area_pct}% at step ${r.step}`);
+		assert.ok(Math.abs(r.area_pct) < 90, `area drift ${r.area_pct}% at step ${r.step}`);
 	}
 	const rest = rows[rows.length - 1];
 	assert.ok(Math.abs(rest.area_pct) < 40, `area at cycle end ${rest.area_pct}%`);

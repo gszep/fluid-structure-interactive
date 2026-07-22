@@ -86,8 +86,10 @@ fn advect(@builtin(global_invocation_id) gid: vec3<u32>) {
     // solid interior (phi < 0) is untouched.
     let phi_here = level_set_at(c, vec2<f32>(x));
     // starting inside the outer half of the blur zone (0.5 eps) erodes the
-    // interface dither that otherwise inflates swimming bodies
-    let w = 0.3 * smoothstep(0.5 * params.epsilon, 3.0 * params.epsilon, phi_here);
+    // interface dither that otherwise inflates swimming bodies; the strong,
+    // tight band also wipes the smeared-xi wake debris that free swimmers
+    // leave behind (which would otherwise litter the vortex street)
+    let w = 0.5 * smoothstep(0.5 * params.epsilon, 2.0 * params.epsilon, phi_here);
     xi_new = mix(xi_new, 0.25 * (r1 + l1 + u1 + d1), w);
 
     // Anchored scenes: the drive angle is known exactly, so the ideal

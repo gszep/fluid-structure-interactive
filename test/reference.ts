@@ -170,9 +170,9 @@ export class Solver {
 			heal: 0,
 			waveNumber: 0,
 			// far-field xi diffusion: rate * smoothstep(from * eps, to * eps, phi)
-			diffusionRate: 0.3,
+			diffusionRate: 0.5,
 			diffusionFrom: 0.5,
-			diffusionTo: 3,
+			diffusionTo: 2,
 		};
 		Object.assign(this, defaults, params);
 

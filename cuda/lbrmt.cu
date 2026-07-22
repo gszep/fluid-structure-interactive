@@ -614,9 +614,9 @@ int main(int argc, char** argv) {
     p.heal = p.shape == 0 ? 0.f : 3e-4f;
     p.force_clamp = 0.2f;
     p.velocity_clamp = 0.25f;
-    p.diffusion_rate = 0.3f;
+    p.diffusion_rate = 0.5f;
     p.diffusion_from = 0.5f;
-    p.diffusion_to = 3.f;
+    p.diffusion_to = 2.f;
 
     // overrides
     p.tau = argf(argc, argv, "--tau", p.tau);
