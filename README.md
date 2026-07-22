@@ -1,5 +1,58 @@
 # Interactive Fluid-Structure Simulation
 
+A real-time WebGPU implementation of the **lattice-Boltzmann reference map technique (LBRMT)** — a fully-Eulerian fluid–structure interaction method — tuned for interactive play rather than biophysical accuracy.
+
+Soft neo-Hookean solids move through a D2Q9 lattice-Boltzmann fluid. Interact with the mouse: **left-click-drag on a solid grabs and tows it**, left-click in fluid pushes, right-click pulls, scroll changes the interaction radius.
+
+Scenes (`?scene=` URL parameter):
+
+- **`rotor`** (default) — a seven-pointed star making full alternating revolutions, driven by an anchor force (thesis section 3.3); stable indefinitely at 60 fps
+- **`rotors`** — four anchored three-pronged rotors, rows spinning in opposite directions through a full revolution and back (JCP paper section 4.2); extreme transient deformation, perfect recovery each cycle
+- **`flapper`** — a capsule with a periodically actuated muscle region that bends and swims
+
+## Method
+
+Based on:
+
+- Yue Sun (2020), *A lattice Boltzmann implementation of the reference map technique*, Harvard master's thesis (`2020_Sun.pdf`)
+- Sun & Rycroft (2025), *A fully-integrated lattice Boltzmann method for fluid–structure interaction*, JCP 526 113774 — reference code: https://github.com/yue-sun/lbrmt
+
+Everything lives on one fixed grid. Per timestep, two fully-parallel compute passes over ping-pong textures:
+
+1. **`advect`** — the reference map ξ (the backward flow map) is advected with the force-corrected fluid velocity using second-order ENO upwinding.
+2. **`collide`** — the solid region is `{ x : φ(ξ(x)) < 0 }` (level set evaluated through ξ); half-edge neo-Hookean stresses, smoothed by a blur-zone solid fraction, enter the D2Q9 BGK collision as a Guo forcing term (pull streaming).
+
+GPU-friendly simplifications vs. the papers:
+
+- ξ is advected *globally*, so the layer-by-layer least-squares extrapolation zone is replaced by a gentle far-field diffusion of ξ — every step is a local stencil op.
+- First-order operator splitting between advection and collision (costs one order of convergence in the shear-wave test; see `test/shearwave.test.ts`).
+- Actuation follows the lbrmt `obj_flapper`: an area-preserving active stretch `F ← F·diag(e^{c(t)Y}, e^{-c(t)Y})` inside a muscle region of reference space makes the body bend and swim.
+
+## Development
+
+```bash
+npm install
+npm start          # webpack dev server
+npm test           # unit + physics tests (CPU reference implementation)
+npm run test:e2e   # drives real Chrome + WebGPU via the DevTools protocol
+npm run typecheck  # strict TS check of the test suite
+```
+
+The physics tests ladder up to the thesis results: D2Q9 isotropy, Taylor–Green vortex viscosity, plane shear-wave dispersion/decay and convergence, passive solid equilibrium, poke-and-recover, and a swimming actuated flapper. `test/reference.ts` is a line-for-line CPU mirror of the WGSL solver — keep them in sync.
+
+### CUDA reference
+
+`cuda/lbrmt.cu` mirrors the WGSL solver in float32 at production resolution (448² × 100k steps in ~5 s on an RTX GPU). It is the tool for tuning and long-run stability work — it emits JSON coherence metrics (mass, solid area, debris, anchor drift, rotation tracking) and grayscale BMP snapshots (white fluid / black solid; if it starts looking like ink in water, something is wrong). `npm test` runs long-run rotor stability tests through it when `nvcc` is available.
+
+Stability ingredients for anchored rotors, found with this loop (all mirrored in the WGSL):
+
+- **acceleration-capped forcing** (`|F| ≤ clamp · min(ρ,1)`) — prevents runaway blow-up of near-vacuum cells
+- **displacement-capped anchor spring with a smooth footprint** — a motor with slip instead of a runaway pull that cavitates the pivot
+- **position-gated level set** — an anchored body cannot leave its pivot neighbourhood, so distant "solid" is phantom by definition
+- **weak Rayleigh friction** (3e-4) — the periodic box has no walls to absorb the momentum the drive pumps in
+- **analytic healing** (3e-4) — the drive angle is known exactly, so ξ relaxes toward the ideal rigidly-rotated map: strongly in the fluid (substituting for the paper's extrapolation zone), weakly in the solid (curing secular inflation while leaving elastic bending free)
+- **slow drive, many substeps** — tip speed must stay well below the shear wave speed √G (the paper's regime is ~0.03 cells/step); 32 substeps/frame keeps it real-time
+
 ## Bleeding-edge WebGPU
 
 As WebGPU is still in active development, it is likely not yet available in release builds of recent browsers. In particular, chrome users on linux systems must use the following startup flags

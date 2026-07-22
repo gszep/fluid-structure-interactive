@@ -1,3 +1,8 @@
+interface Size {
+	width: number;
+	height: number;
+}
+
 function throwDetectionError(error: string): never {
 	(
 		document.querySelector(".webgpu-not-supported") as HTMLElement
@@ -5,39 +10,29 @@ function throwDetectionError(error: string): never {
 	throw new Error("Could not initialize WebGPU: " + error);
 }
 
-async function requestDevice(
-	options: GPURequestAdapterOptions = {
-		powerPreference: "high-performance",
-	},
-	requiredFeatures: GPUFeatureName[] = [],
-	requiredLimits: Record<string, undefined | number> = {
-		maxStorageTexturesPerShaderStage: 4,
-		maxComputeWorkgroupStorageSize: 17408, // not mobile-friendly
-	}
-): Promise<GPUDevice> {
+async function requestDevice(): Promise<GPUDevice> {
 	if (!navigator.gpu) throwDetectionError("WebGPU NOT Supported");
 
-	const adapter = await navigator.gpu.requestAdapter(options);
+	const adapter = await navigator.gpu.requestAdapter({
+		powerPreference: "high-performance",
+	});
 	if (!adapter) throwDetectionError("No GPU adapter found");
 
-	return adapter.requestDevice({
-		requiredFeatures: requiredFeatures,
-		requiredLimits: requiredLimits,
-	});
+	return adapter.requestDevice();
 }
 
 function configureCanvas(
 	device: GPUDevice,
-	size = { width: window.innerWidth, height: window.innerHeight }
+	size: Size = { width: window.innerWidth, height: window.innerHeight }
 ): {
 	context: GPUCanvasContext;
 	format: GPUTextureFormat;
-	size: { width: number; height: number };
+	size: Size;
 } {
 	const canvas = Object.assign(document.createElement("canvas"), size);
 	document.body.appendChild(canvas);
 
-	const context = document.querySelector("canvas")!.getContext("webgpu");
+	const context = canvas.getContext("webgpu");
 	if (!context) throwDetectionError("Canvas does not support WebGPU");
 
 	const format = navigator.gpu.getPreferredCanvasFormat();
@@ -67,12 +62,8 @@ function setupVertexBuffer(
 		size: array.byteLength,
 		usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
 	});
+	device.queue.writeBuffer(vertexBuffer, 0, array);
 
-	device.queue.writeBuffer(
-		vertexBuffer,
-		/*bufferOffset=*/ 0,
-		/*data=*/ array
-	);
 	return {
 		vertexBuffer: vertexBuffer,
 		vertexCount: array.length / 2,
@@ -81,275 +72,184 @@ function setupVertexBuffer(
 	};
 }
 
-function setupTextures(
+/** Create a texture used as both a sampled source and a storage destination. */
+function createFieldTexture(
 	device: GPUDevice,
-	bindings: number[],
-	data: { [key: number]: number[][][] },
-	size: {
-		depthOrArrayLayers?: { [key: number]: number };
-		width: number;
-		height: number;
-	}
-): {
-	canvas: {
-		buffer: GPUBuffer;
-		data: BufferSource | SharedArrayBuffer;
-		type: GPUBufferBindingType;
-	};
-	textures: { [key: number]: GPUTexture };
-	bindingLayout: { [key: number]: GPUStorageTextureBindingLayout };
-	size: {
-		depthOrArrayLayers?: { [key: number]: number };
-		width: number;
-		height: number;
-	};
-} {
-	const FORMAT = "r32float";
-	const CHANNELS = channelCount(FORMAT);
-
-	const textures: { [key: number]: GPUTexture } = {};
-	const bindingLayout: { [key: number]: GPUStorageTextureBindingLayout } = {};
-	const depthOrArrayLayers = size.depthOrArrayLayers || {};
-
-	bindings.forEach((key) => {
-		textures[key] = device.createTexture({
-			usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_DST,
-			format: FORMAT,
-			size: {
-				width: size.width,
-				height: size.height,
-				depthOrArrayLayers:
-					key in depthOrArrayLayers ? depthOrArrayLayers[key] : 1,
-			},
-		});
-	});
-
-	Object.keys(textures).forEach((key) => {
-		const layers =
-			key in depthOrArrayLayers ? depthOrArrayLayers[parseInt(key)] : 1;
-
-		bindingLayout[parseInt(key)] = {
-			format: FORMAT,
-			access: "read-write",
-			viewDimension: layers > 1 ? "2d-array" : "2d",
-		};
-
-		const array =
-			key in data
-				? new Float32Array(flatten(data[parseInt(key)]))
-				: new Float32Array(
-						flatten(zeros(size.height, size.width, layers))
-				  );
-
-		device.queue.writeTexture(
-			{ texture: textures[parseInt(key)] },
-			/*data=*/ array,
-			/*dataLayout=*/ {
-				offset: 0,
-				bytesPerRow: size.width * array.BYTES_PER_ELEMENT * CHANNELS,
-				rowsPerImage: size.height,
-			},
-			/*size=*/ {
-				width: size.width,
-				height: size.height,
-				depthOrArrayLayers: layers,
-			}
-		);
-	});
-
-	let canvasData = new Uint32Array([size.width, size.height, 0, 0]);
-	const canvasBuffer = device.createBuffer({
-		label: "Canvas Buffer",
-		size: canvasData.byteLength,
-		usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-	});
-
-	device.queue.writeBuffer(canvasBuffer, /*offset=*/ 0, /*data=*/ canvasData);
-
-	return {
-		canvas: {
-			buffer: canvasBuffer,
-			data: canvasData,
-			type: "uniform",
-		},
-		textures: textures,
-		bindingLayout: bindingLayout,
-		size: size,
-	};
-}
-
-function flatten(nestedArray: number[][][]): number[] {
-	const flattened = [];
-	for (let k = 0; k < nestedArray[0][0].length; k++) {
-		for (let i = 0; i < nestedArray.length; i++) {
-			for (let j = 0; j < nestedArray[0].length; j++) {
-				flattened.push(nestedArray[i][j][k]);
-			}
-		}
-	}
-
-	return flattened;
-}
-
-function zeros(
-	height: number,
-	width: number,
+	label: string,
+	size: Size,
+	format: GPUTextureFormat,
 	layers: number = 1
-): number[][][] {
-	const zeroArray = [];
-
-	for (let i = 0; i < height; i++) {
-		const row = [];
-		for (let j = 0; j < width; j++) {
-			const layer = [];
-			for (let k = 0; k < layers; k++) {
-				layer.push(0);
-			}
-			row.push(layer);
-		}
-		zeroArray.push(row);
-	}
-
-	return zeroArray;
+): GPUTexture {
+	return device.createTexture({
+		label: label,
+		format: format,
+		size: { width: size.width, height: size.height, depthOrArrayLayers: layers },
+		usage:
+			GPUTextureUsage.TEXTURE_BINDING |
+			GPUTextureUsage.STORAGE_BINDING |
+			GPUTextureUsage.COPY_DST |
+			GPUTextureUsage.COPY_SRC,
+	});
 }
 
+function writeFieldTexture(
+	device: GPUDevice,
+	texture: GPUTexture,
+	size: Size,
+	layers: number,
+	bytesPerTexel: number,
+	data: Float32Array
+): void {
+	device.queue.writeTexture(
+		{ texture: texture },
+		data,
+		{ bytesPerRow: size.width * bytesPerTexel, rowsPerImage: size.height },
+		{ width: size.width, height: size.height, depthOrArrayLayers: layers }
+	);
+}
+
+/**
+ * Cursor interactions. Returns a uniform buffer laid out as
+ * [x, y, signedRadius, pad, vx, vy, pad, pad] in simulation-grid coordinates.
+ * signedRadius is positive while pushing (left click / one finger), negative
+ * while pulling (right click / two fingers) and zero when inactive. (vx, vy)
+ * is the smoothed cursor velocity, used to drag the fluid and solid around.
+ * Scroll adjusts the radius. Call update() once per frame.
+ */
 function setupInteractions(
 	device: GPUDevice,
-	canvas: HTMLCanvasElement | OffscreenCanvas,
-	texture: { width: number; height: number },
-	size: number = 100
+	canvas: HTMLCanvasElement,
+	grid: Size,
+	radius: number = 50
 ): {
 	buffer: GPUBuffer;
-	data: BufferSource | SharedArrayBuffer;
-	type: GPUBufferBindingType;
+	data: Float32Array;
+	update: () => void;
+	consumeGrabRequest: () => [number, number] | null;
 } {
-	let data = new Float32Array(4);
-	var sign = 1;
+	const data = new Float32Array(8);
+	let sign = 1;
+	let previous: [number, number] | null = null;
+	let grabRequest: [number, number] | null = null;
+	// raw cursor position; while grabbing, data[0..1] is a rate-limited
+	// towpoint chasing it, so the solid is never yanked faster than it can
+	// physically follow (it would tear apart)
+	let raw: [number, number] = [0, 0];
 
-	let position = { x: 0, y: 0 };
-	let velocity = { x: 0, y: 0 };
+	const setPosition = (x: number, y: number) => {
+		raw = [(x / canvas.width) * grid.width, (y / canvas.height) * grid.height];
+		if (data[3] === 0) {
+			data[0] = raw[0];
+			data[1] = raw[1];
+		}
+	};
 
-	data.set([position.x, position.y]);
-	if (canvas instanceof HTMLCanvasElement) {
-		// disable context menu
-		canvas.addEventListener("contextmenu", (event) => {
-			event.preventDefault();
+	canvas.addEventListener("contextmenu", (event) => event.preventDefault());
+
+	canvas.addEventListener(
+		"mousemove",
+		(event) => setPosition(event.offsetX, event.offsetY),
+		{ passive: true }
+	);
+	canvas.addEventListener(
+		"touchmove",
+		(event) =>
+			setPosition(event.touches[0].clientX, event.touches[0].clientY),
+		{ passive: true }
+	);
+
+	canvas.addEventListener("mousedown", (event) => {
+		sign = event.button === 2 ? -1 : 1;
+		setPosition(event.offsetX, event.offsetY);
+		data[2] = sign * radius;
+		if (sign > 0) grabRequest = [data[0], data[1]];
+	});
+	canvas.addEventListener(
+		"touchstart",
+		(event) => {
+			sign = event.touches.length > 1 ? -1 : 1;
+			setPosition(event.touches[0].clientX, event.touches[0].clientY);
+			data[2] = sign * radius;
+			if (sign > 0) grabRequest = [data[0], data[1]];
+		},
+		{ passive: true }
+	);
+
+	["mouseup", "mouseleave", "touchend", "touchcancel"].forEach((type) => {
+		canvas.addEventListener(type, () => {
+			data[2] = 0;
+			data[3] = 0; // release the grab
+			grabRequest = null;
 		});
+	});
 
-		// move events
-		["mousemove", "touchmove"].forEach((type) => {
-			canvas.addEventListener(
-				type,
-				(event) => {
-					switch (true) {
-						case event instanceof MouseEvent:
-							position.x = event.offsetX;
-							position.y = event.offsetY;
-							break;
+	canvas.addEventListener(
+		"wheel",
+		(event) => {
+			const limit = 0.5 * Math.min(grid.width, grid.height);
+			radius = Math.min(Math.max(radius + event.deltaY * 0.05, 5), limit);
+			if (data[2] !== 0) data[2] = sign * radius;
+		},
+		{ passive: true }
+	);
 
-						case event instanceof TouchEvent:
-							position.x = event.touches[0].clientX;
-							position.y = event.touches[0].clientY;
-							break;
-					}
-
-					let x = Math.floor(
-						(position.x / canvas.width) * texture.width
-					);
-					let y = Math.floor(
-						(position.y / canvas.height) * texture.height
-					);
-
-					data.set([x, y]);
-				},
-				{ passive: true }
-			);
-		});
-
-		// zoom events TODO(@gszep) add pinch and scroll for touch devices
-		["wheel"].forEach((type) => {
-			canvas.addEventListener(
-				type,
-				(event) => {
-					switch (true) {
-						case event instanceof WheelEvent:
-							velocity.x = event.deltaY;
-							velocity.y = event.deltaY;
-							break;
-					}
-
-					size += velocity.y;
-					data.set([size], 2);
-				},
-				{ passive: true }
-			);
-		});
-
-		// click events TODO(@gszep) implement right click equivalent for touch devices
-		["mousedown", "touchstart"].forEach((type) => {
-			canvas.addEventListener(
-				type,
-				(event) => {
-					switch (true) {
-						case event instanceof MouseEvent:
-							sign = 1 - event.button;
-							break;
-
-						case event instanceof TouchEvent:
-							sign = event.touches.length > 1 ? -1 : 1;
-					}
-					data.set([sign * size], 2);
-				},
-				{ passive: true }
-			);
-		});
-		["mouseup", "touchend"].forEach((type) => {
-			canvas.addEventListener(
-				type,
-				(event) => {
-					data.set([NaN], 2);
-				},
-				{ passive: true }
-			);
-		});
-	}
-	const uniformBuffer = device.createBuffer({
+	const buffer = device.createBuffer({
 		label: "Interaction Buffer",
 		size: data.byteLength,
 		usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
 	});
 
+	// per-frame: advance the towpoint and the smoothed cursor velocity
+	const update = () => {
+		if (data[3] > 0) {
+			const maxStep = 2; // cells per frame
+			const dx = raw[0] - data[0];
+			const dy = raw[1] - data[1];
+			const dist = Math.hypot(dx, dy);
+			const scale = dist > maxStep ? maxStep / dist : 1;
+			data[0] += dx * scale;
+			data[1] += dy * scale;
+		} else {
+			data[0] = raw[0];
+			data[1] = raw[1];
+		}
+		if (previous && data[2] !== 0) {
+			data[4] = 0.6 * data[4] + 0.4 * (data[0] - previous[0]);
+			data[5] = 0.6 * data[5] + 0.4 * (data[1] - previous[1]);
+		} else {
+			data[4] = 0;
+			data[5] = 0;
+		}
+		previous = [data[0], data[1]];
+	};
+
+	const consumeGrabRequest = (): [number, number] | null => {
+		const request = grabRequest;
+		grabRequest = null;
+		return request;
+	};
+
 	return {
-		buffer: uniformBuffer,
+		buffer: buffer,
 		data: data,
-		type: "uniform",
+		update: update,
+		consumeGrabRequest: consumeGrabRequest,
 	};
 }
 
-function channelCount(format: GPUTextureFormat): number {
-	if (format.includes("rgba")) {
-		return 4;
-	} else if (format.includes("rgb")) {
-		return 3;
-	} else if (format.includes("rg")) {
-		return 2;
-	} else if (format.includes("r")) {
-		return 1;
-	} else {
-		throw new Error("Invalid format: " + format);
-	}
-}
-
+/** Replace `#import` directives by prepending the included source files. */
 function prependIncludes(code: string, includes: string[]): string {
 	code = code.replace(/^#import.*/gm, "");
 	return includes.reduce((acc, include) => include + "\n" + acc, code);
 }
 
 export {
+	Size,
 	requestDevice,
 	configureCanvas,
 	setupVertexBuffer,
-	setupTextures,
+	createFieldTexture,
+	writeFieldTexture,
 	setupInteractions,
 	prependIncludes,
 };

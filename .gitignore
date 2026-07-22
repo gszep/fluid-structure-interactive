@@ -5,9 +5,14 @@ node_modules
 *.js.map
 *.js
 
+# generated builds
+cuda/build/
+
 # webpack
 !docs/index.html
 !docs/index.bundle.js
 !docs/runtime.bundle.js
 !docs/*/*.bundle.js
 !webpack.config.js
+# Chi local state and sensitive artifacts (runtime state lives under ~/.chi)
+.chi/
