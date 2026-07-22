@@ -44,6 +44,8 @@ struct Params {
     float friction;          // Rayleigh friction: v <- (1 - friction) v in feq
     float heal;              // anchored scenes: relax xi toward the ideal
                              // rigidly-rotated map (analytic "extrapolation")
+    float magic;             // TRT magic parameter Lambda (1/4 = stability)
+    float wave_number;       // flapper: traveling-wave number of the muscle
 };
 
 __constant__ Params par;
@@ -54,6 +56,7 @@ __constant__ Params par;
 __device__ __constant__ int   CX[9] = {0, 1, 0, -1, 0, 1, -1, -1, 1};
 __device__ __constant__ int   CY[9] = {0, 0, 1, 0, -1, 1, 1, -1, -1};
 __device__ __constant__ float Wt[9] = {4.f/9, 1.f/9, 1.f/9, 1.f/9, 1.f/9, 1.f/36, 1.f/36, 1.f/36, 1.f/36};
+__device__ __constant__ int   OPP[9] = {0, 3, 4, 1, 2, 7, 8, 5, 6};
 
 #define PI 3.14159265358979f
 
@@ -178,9 +181,12 @@ __device__ inline float3 moments(const float* f) {
     return make_float3(rho, mx, my);
 }
 
-__device__ inline float contraction(int step) {
-    float s = sinf(par.actuation_freq * step);
-    return -par.actuation_amp * s * s;
+// flapper muscle activation: a wave traveling along the body (+X direction)
+// pushes fluid backward and drives the swimmer forward; con multiplies Y in
+// the active stretch exp(con * Y), bending the body locally.
+__device__ inline float contraction(int step, float X) {
+    float s = sinf(par.actuation_freq * step - par.wave_number * X);
+    return -par.actuation_amp * s;
 }
 
 // ---------------------------------------------------------------------------
@@ -189,7 +195,7 @@ __device__ inline float contraction(int step) {
 struct Mat2 { float a, b, c, d; }; // [[a, b], [c, d]] row-major
 
 __device__ inline Mat2 edge_stress(float Xx, float Xy, float Yx, float Yy,
-                                   float2 xi_edge, float phi_edge, float con) {
+                                   float2 xi_edge, float phi_edge, int con_step) {
     Mat2 zero = {0.f, 0.f, 0.f, 0.f};
     float sf = solid_fraction(phi_edge);
     if (sf <= 0.f) return zero;
@@ -200,7 +206,7 @@ __device__ inline Mat2 edge_stress(float Xx, float Xy, float Yx, float Yy,
     if (par.shape == 0) {
         float2 X = reference_coord(xi_edge);
         float muscle = solid_fraction(capsule(X, par.muscle_half_length, par.muscle_radius));
-        float fac = fminf(2.f, fmaxf(0.5f, expf(con * X.y * muscle)));
+        float fac = fminf(2.f, fmaxf(0.5f, expf(contraction(con_step, X.x) * X.y * muscle)));
         F11 *= fac; F21 *= fac; F12 /= fac; F22 /= fac;
     }
 
@@ -269,7 +275,7 @@ __device__ inline float2 total_force(const float2* xi, int x, int y, int step) {
             phi[(dx + 1) + 3 * (dy + 1)] = level_set_at(v, (float)(x + dx), (float)(y + dy));
         }
     const int dl = 0, dd = 1, dr = 2, ll = 3, cc = 4, rr = 5, ul = 6, uu = 7, ur = 8;
-    float con = contraction(step);
+    int con = step;
 
     Mat2 sL = edge_stress(n[cc].x - n[ll].x, 0.25f * (n[uu].x + n[ul].x - n[dd].x - n[dl].x),
                           n[cc].y - n[ll].y, 0.25f * (n[uu].y + n[ul].y - n[dd].y - n[dl].y),
@@ -402,13 +408,27 @@ __global__ void collide_kernel(const float2* xi, const float* f_src, float* f_ds
     v.x *= 1.f - par.friction;
     v.y *= 1.f - par.friction;
     float usq = v.x * v.x + v.y * v.y;
-    float itau = 1.f / par.tau, fw = 1.f - 0.5f * itau;
+    // TRT collision (two relaxation times): even modes relax with 1/tau
+    // (sets the viscosity), odd modes with the "magic" combination
+    // Lambda = (tau+ - 1/2)(tau- - 1/2) = 1/4, which is markedly more stable
+    // than BGK at low viscosity (tau -> 1/2) and damps the staircase noise
+    // that BGK produces around fast-moving interfaces.
+    float wp = 1.f / par.tau;
+    float wm = 1.f / (0.5f + par.magic / (par.tau - 0.5f));
+    float fw = 1.f - 0.5f * wp;
+    float feq[9];
     for (int i = 0; i < 9; i++) {
         float cu = CX[i] * v.x + CY[i] * v.y;
-        float feq = Wt[i] * rho * (1.f + 3.f * cu + 4.5f * cu * cu - 1.5f * usq);
+        feq[i] = Wt[i] * rho * (1.f + 3.f * cu + 4.5f * cu * cu - 1.5f * usq);
+    }
+    for (int i = 0; i < 9; i++) {
+        int j = OPP[i];
+        float fp = 0.5f * (f[i] + f[j]), fm = 0.5f * (f[i] - f[j]);
+        float ep = 0.5f * (feq[i] + feq[j]), em = 0.5f * (feq[i] - feq[j]);
+        float cu = CX[i] * v.x + CY[i] * v.y;
         float Fi = Wt[i] * (3.f * ((CX[i] - v.x) * force.x + (CY[i] - v.y) * force.y)
                             + 9.f * cu * (CX[i] * force.x + CY[i] * force.y));
-        f_dst[i * n + k] = f[i] - itau * (f[i] - feq) + fw * Fi;
+        f_dst[i * n + k] = f[i] - wp * (fp - ep) - wm * (fm - em) + fw * Fi;
     }
 }
 
@@ -473,6 +493,22 @@ __global__ void render_kernel(const float2* xi, const float* f, unsigned char* r
     rgb[3 * k + 1] = v;
     rgb[3 * k + 2] = v;
 
+    // vorticity channel in red/blue tint (solid stays black, fluid white)
+    if (lam < 0.5f) {
+        auto vel = [&](int xx, int yy) {
+            float ff[9];
+            int nn = par.width * par.height;
+            for (int i = 0; i < 9; i++) ff[i] = f[i * nn + cell(xx, yy)];
+            float3 mm = moments(ff);
+            return make_float2(mm.y / fmaxf(mm.x, 1e-6f), mm.z / fmaxf(mm.x, 1e-6f));
+        };
+        float vort = 0.5f * ((vel(x + 1, y).y - vel(x - 1, y).y) - (vel(x, y + 1).x - vel(x, y - 1).x));
+        float wv = fminf(1.f, fmaxf(-1.f, vort * 200.f));
+        // positive vorticity removes blue+green -> red; negative -> blue
+        if (wv > 0.f) { rgb[3 * k + 0] = (unsigned char)((1.f - wv) * v); rgb[3 * k + 1] = (unsigned char)((1.f - wv) * v); }
+        else { rgb[3 * k + 1] = (unsigned char)((1.f + wv) * v); rgb[3 * k + 2] = (unsigned char)((1.f + wv) * v); }
+    }
+
     // pivot region outline (mid gray ring) for orientation
     float px = x - par.cx, py = y - par.cy;
     px -= par.width * rintf(px / par.width);
@@ -528,31 +564,34 @@ int main(int argc, char** argv) {
     p.height = (int)argf(argc, argv, "--ny", p.width);
     const char* scene = args(argc, argv, "--scene", "rotor");
     float scale = fminf(p.width, p.height);
+    p.magic = 0.25f;
+    p.wave_number = 0.f;
     float L = scale;
 
     // defaults mirroring src/index.ts scene settings
     if (!strcmp(scene, "rotor")) {
         p.shape = 1;
-        p.tau = 0.8f; p.shear_modulus = 0.05f; p.bulk_modulus = 0.15f;
+        p.tau = 0.55f; p.shear_modulus = 0.05f; p.bulk_modulus = 0.15f;
         p.cx = p.width / 2.f; p.cy = p.height / 2.f;
         p.half_length = 0.16f * scale; p.radius = 0.04f * scale;
         p.pivot_radius = 0.1f * scale;
         p.spin_angle = PI; p.spin_freq = 2.f * PI / 54000.f;
     } else if (!strcmp(scene, "rotors")) {
         p.shape = 2;
-        p.tau = 0.8f; p.shear_modulus = 0.05f; p.bulk_modulus = 0.15f;
+        p.tau = 0.7f; p.shear_modulus = 0.05f; p.bulk_modulus = 0.15f;
         p.cx = p.width / 4.f; p.cy = p.height / 4.f;
         p.half_length = 0.174f * L; p.radius = 0.04f * L; p.muscle_radius = 0.04f * L;
         p.pivot_radius = 0.1f * L;
         p.spin_angle = PI; p.spin_freq = 2.f * PI / 54000.f;
     } else { // flapper
         p.shape = 0;
-        p.tau = 0.65f; p.shear_modulus = 0.06f; p.bulk_modulus = 0.18f;
+        p.tau = 0.55f; p.shear_modulus = 0.06f; p.bulk_modulus = 0.18f;
         p.cx = p.width / 2.f; p.cy = p.height / 2.f;
         p.half_length = 0.1f * scale; p.radius = 0.035f * scale;
-        p.muscle_half_length = 0.06f * scale; p.muscle_radius = 0.018f * scale;
-        p.actuation_amp = logf(2.f) / p.muscle_radius;
-        p.actuation_freq = 2.f * PI / 500.f;
+        p.muscle_half_length = 0.085f * scale; p.muscle_radius = 0.022f * scale;
+        p.actuation_amp = 1.2f / p.muscle_radius;
+        p.actuation_freq = 2.f * PI / 300.f;
+        p.wave_number = 35.8f / scale;
     }
     p.epsilon = 2.f;
     p.anchor_strength = 0.02f;
@@ -573,6 +612,7 @@ int main(int argc, char** argv) {
     p.half_length = argf(argc, argv, "--hl", p.half_length);
     p.radius = argf(argc, argv, "--rad", p.radius);
     p.muscle_radius = argf(argc, argv, "--fillet", p.muscle_radius);
+    p.muscle_half_length = argf(argc, argv, "--mhl", p.muscle_half_length);
     p.pivot_radius = argf(argc, argv, "--pivot", p.pivot_radius);
     p.spin_angle = argf(argc, argv, "--spin_angle", p.spin_angle);
     float T = argf(argc, argv, "--T", 2.f * PI / p.spin_freq);
@@ -581,6 +621,10 @@ int main(int argc, char** argv) {
     p.anchor_range = argf(argc, argv, "--Krange", p.anchor_range);
     p.friction = argf(argc, argv, "--friction", p.friction);
     p.heal = argf(argc, argv, "--heal", p.heal);
+    p.magic = argf(argc, argv, "--magic", p.magic);
+    p.wave_number = argf(argc, argv, "--wavek", p.wave_number);
+    float period = argf(argc, argv, "--period", 2.f * PI / fmaxf(p.actuation_freq, 1e-9f));
+    if (p.shape == 0) p.actuation_freq = 2.f * PI / period;
     p.force_clamp = argf(argc, argv, "--fclamp", p.force_clamp);
     p.velocity_clamp = argf(argc, argv, "--vclamp", p.velocity_clamp);
     p.diffusion_rate = argf(argc, argv, "--diff", p.diffusion_rate);

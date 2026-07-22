@@ -54,7 +54,7 @@ fn advect(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (any(gid.xy >= params.size)) { return; }
     let x = vec2<i32>(gid.xy);
 
-    var force = total_force(x, contraction());
+    var force = total_force(x);
     let m = moments(pull(x));
     let rho = max(m.x, EPS);
     // cap the *acceleration*: near-vacuum cells must not be blown apart
@@ -122,16 +122,17 @@ fn advect(@builtin(global_invocation_id) gid: vec3<u32>) {
 // Pass 2: solid stress + forced lattice-Boltzmann update.
 // ---------------------------------------------------------------------------
 
-// Time-periodic muscle contraction: one-sided pulses (power stroke) with
-// elastic recovery in between, like the lbrmt jellyfish flapper.
-fn contraction() -> f32 {
-    let s = sin(params.actuation_freq * f32(params.step));
-    return -params.actuation_amp * s * s;
+// Flapper muscle activation: a wave traveling along the body (+X) pushes
+// fluid backward and drives the swimmer forward. The returned value
+// multiplies Y in the active stretch exp(con * Y), bending the body locally.
+fn contraction(X: f32) -> f32 {
+    let s = sin(params.actuation_freq * f32(params.step) - params.wave_number * X);
+    return -params.actuation_amp * s;
 }
 
 // Neo-Hookean stress at a cell edge, from the Jacobian of the reference map,
 // smoothed by the solid fraction. Includes the active muscle deformation.
-fn edge_stress(jac: mat2x2<f32>, xi_edge: vec2<f32>, phi_edge: f32, con: f32) -> mat2x2<f32> {
+fn edge_stress(jac: mat2x2<f32>, xi_edge: vec2<f32>, phi_edge: f32) -> mat2x2<f32> {
     let zero = mat2x2<f32>(vec2<f32>(0.0), vec2<f32>(0.0));
     let sf = solid_fraction(phi_edge);
     if (sf <= 0.0) { return zero; }
@@ -151,7 +152,7 @@ fn edge_stress(jac: mat2x2<f32>, xi_edge: vec2<f32>, phi_edge: f32, con: f32) ->
     if (params.shape == 0u) {
         let X = reference_coord(xi_edge);
         let muscle = solid_fraction(capsule(X, params.muscle_half_length, params.muscle_radius));
-        let fac = clamp(exp(con * X.y * muscle), 0.5, 2.0);
+        let fac = clamp(exp(contraction(X.x) * X.y * muscle), 0.5, 2.0);
         F[0] *= fac;
         F[1] *= 1.0 / fac;
     }
@@ -165,7 +166,7 @@ fn edge_stress(jac: mat2x2<f32>, xi_edge: vec2<f32>, phi_edge: f32, con: f32) ->
 }
 
 // Divergence of the solid stress at node x, plus the user interaction force.
-fn total_force(x: vec2<i32>, con: f32) -> vec2<f32> {
+fn total_force(x: vec2<i32>) -> vec2<f32> {
     // 3x3 neighbourhood of the reference map, unwrapped around the centre
     var xi: array<vec2<f32>, 9>; // index (dx+1) + 3*(dy+1)
     var phi: array<f32, 9>;
@@ -184,16 +185,16 @@ fn total_force(x: vec2<i32>, con: f32) -> vec2<f32> {
     // Half-edge stresses (second-order finite differences of xi, as in lbrmt)
     let sL = edge_stress(
         mat2x2<f32>(xi[cc] - xi[ll], 0.25 * (xi[uu] + xi[ul] - xi[dd] - xi[dl])),
-        0.5 * (xi[cc] + xi[ll]), 0.5 * (phi[cc] + phi[ll]), con);
+        0.5 * (xi[cc] + xi[ll]), 0.5 * (phi[cc] + phi[ll]));
     let sR = edge_stress(
         mat2x2<f32>(xi[rr] - xi[cc], 0.25 * (xi[ur] + xi[uu] - xi[dr] - xi[dd])),
-        0.5 * (xi[rr] + xi[cc]), 0.5 * (phi[rr] + phi[cc]), con);
+        0.5 * (xi[rr] + xi[cc]), 0.5 * (phi[rr] + phi[cc]));
     let sB = edge_stress(
         mat2x2<f32>(0.25 * (xi[rr] + xi[dr] - xi[ll] - xi[dl]), xi[cc] - xi[dd]),
-        0.5 * (xi[cc] + xi[dd]), 0.5 * (phi[cc] + phi[dd]), con);
+        0.5 * (xi[cc] + xi[dd]), 0.5 * (phi[cc] + phi[dd]));
     let sT = edge_stress(
         mat2x2<f32>(0.25 * (xi[ur] + xi[rr] - xi[ul] - xi[ll]), xi[uu] - xi[cc]),
-        0.5 * (xi[uu] + xi[cc]), 0.5 * (phi[uu] + phi[cc]), con);
+        0.5 * (xi[uu] + xi[cc]), 0.5 * (phi[uu] + phi[cc]));
 
     var force = (sR[0] - sL[0]) + (sT[1] - sB[1]);
     force += anchor_force(vec2<f32>(x), xi[cc], phi[cc]);
@@ -291,7 +292,7 @@ fn collide(@builtin(global_invocation_id) gid: vec3<u32>) {
     let x = vec2<i32>(gid.xy);
 
     // Divergence of the solid stress (from the freshly advected xi) + user interaction
-    var force = total_force(x, contraction());
+    var force = total_force(x);
 
     // Forced BGK collision (Guo forcing, second order in velocity space)
     let f = pull(x);
@@ -305,13 +306,24 @@ fn collide(@builtin(global_invocation_id) gid: vec3<u32>) {
     v *= 1.0 - params.friction;
 
     let feq = equilibrium(rho, v);
-    let itau = 1.0 / params.tau;
-    let fw = 1.0 - 0.5 * itau;
+    // TRT collision (two relaxation times): even modes relax with 1/tau
+    // (setting the viscosity), odd modes with the "magic" combination
+    // Lambda = (tau+ - 1/2)(tau- - 1/2) = 1/4. Markedly more stable than BGK
+    // at low viscosity and damps the staircase noise that BGK produces
+    // around fast-moving interfaces (needed for clean vortex shedding).
+    let wp = 1.0 / params.tau;
+    let wm = 1.0 / (0.5 + 0.25 / (params.tau - 0.5));
+    let fw = 1.0 - 0.5 * wp;
 
     for (var i = 0; i < 9; i++) {
+        let j = OPP[i];
+        let fp = 0.5 * (f[i] + f[j]);
+        let fm = 0.5 * (f[i] - f[j]);
+        let ep = 0.5 * (feq[i] + feq[j]);
+        let em = 0.5 * (feq[i] - feq[j]);
         let ci = vec2<f32>(C[i]);
         let Fi = W[i] * (3.0 * dot(ci - v, force) + 9.0 * dot(ci, v) * dot(ci, force));
-        let fi = f[i] - itau * (f[i] - feq[i]) + fw * Fi;
+        let fi = f[i] - wp * (fp - ep) - wm * (fm - em) + fw * Fi;
         textureStore(f_out, x, i, vec4<f32>(fi, 0.0, 0.0, 0.0));
     }
 }

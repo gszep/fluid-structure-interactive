@@ -44,12 +44,15 @@ async function main(): Promise<void> {
 	// prong length 0.2L and pivot radius 0.025L; the lattice pitch is L/2 of
 	// the shorter screen dimension, so facing prongs exactly touch
 	const L = Math.min(grid.width, grid.height);
-	const muscleRadius = 0.018 * scale;
+	const muscleRadius = 0.022 * scale;
 	// Anchored-rotor parameters were tuned with the CUDA reference
 	// (cuda/lbrmt.cu): stable over 4+ full cycles at 448^2 with
 	// tau=0.8, G=0.05, kappa=0.15, T=54000, friction=heal=3e-4.
 	const settings = {
-		tau: shape === 0 ? 0.65 : 0.8, // LB relaxation time; nu = (tau - 0.5) / 3
+		// LB relaxation time; nu = (tau - 0.5) / 3. The TRT collision
+		// operator keeps tau = 0.55 stable (Re high enough for vortex
+		// shedding); the soft four-rotor lattice prefers a calmer fluid.
+		tau: shape === 2 ? 0.7 : 0.55,
 		shearModulus: shape === 0 ? 0.06 : 0.05,
 		bulkModulus: shape === 0 ? 0.18 : 0.15, // kappa ~ 3G
 		epsilon: 2.0, // blur-zone half-width (cells)
@@ -64,11 +67,15 @@ async function main(): Promise<void> {
 		// flapper: capsule radius; rotor: star dilation (fattens the wedge arms,
 		// whose bending stiffness goes as thickness^3); rotors: end-cap radius
 		radius: shape === 2 ? 0.04 * L : shape === 1 ? 0.04 * scale : 0.035 * scale,
-		muscleHalfLength: 0.06 * scale,
+		muscleHalfLength: 0.085 * scale, // muscle spans most of the body
 		// flapper: muscle radius; rotors: prong fillet radius
 		muscleRadius: shape === 2 ? 0.04 * L : muscleRadius,
-		actuationAmp: Math.log(2.0) / muscleRadius, // max active stretch 2x
-		actuationFreq: (2 * Math.PI) / 500, // one stroke every 500 steps
+		// max |con * Y| ~ 1.2 at the muscle edge (tuned in CUDA: strong
+		// enough for ~1 body length per 20 strokes)
+		actuationAmp: 1.2 / muscleRadius,
+		actuationFreq: (2 * Math.PI) / 300, // one stroke every 300 steps
+		// traveling-wave number: wavelength ~ 0.9 body lengths
+		waveNumber: 35.8 / scale,
 		shape: shape,
 		pivotRadius: 0.1 * (shape === 2 ? L : scale),
 		spinAngle: Math.PI, // theta(t) = spinAngle * (1 - cos(spinFreq t))
@@ -108,6 +115,7 @@ async function main(): Promise<void> {
 			settings.spinFreq,
 			settings.friction,
 			settings.heal,
+			settings.waveNumber,
 		],
 		17
 	);

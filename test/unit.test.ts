@@ -64,7 +64,7 @@ test("eno2 is exact for linear and quadratic data", () => {
 test("undeformed solid produces zero stress", () => {
 	const s = new Solver({});
 	// identity reference map -> jacobian = I -> F = I -> B = I -> dev = 0, J = 1
-	const stress = s.edgeStress(1, 0, 0, 1, s.cx, s.cy, -10, 0);
+	const stress = s.edgeStress(1, 0, 0, 1, s.cx, s.cy, -10);
 	for (const row of stress) for (const v of row) assert.ok(Math.abs(v) < 1e-12);
 });
 
@@ -72,7 +72,7 @@ test("pure shear produces symmetric deviatoric stress proportional to G", () => 
 	const s = new Solver({ G: 0.05, kappa: 0.15 });
 	// simple shear: x = X + g Y => xi jacobian = [[1, -g], [0, 1]] (X = x - g y)
 	const g = 0.1;
-	const stress = s.edgeStress(1, -g, 0, 1, s.cx, s.cy, -10, 0);
+	const stress = s.edgeStress(1, -g, 0, 1, s.cx, s.cy, -10);
 	assert.ok(Math.abs(stress[0][1] - stress[1][0]) < 1e-12, "symmetric");
 	assert.ok(Math.abs(stress[0][1] - s.G * g) < 1e-3, "sigma_xy ~ G*gamma");
 });
@@ -81,7 +81,7 @@ test("volumetric compression produces negative pressure ~ kappa(J-1)", () => {
 	const s = new Solver({ G: 0.05, kappa: 0.15 });
 	// uniform compression x = 0.9 X => jacobian of xi = I/0.9, J = 0.81
 	const j = 1 / 0.9;
-	const stress = s.edgeStress(j, 0, 0, j, s.cx, s.cy, -10, 0);
+	const stress = s.edgeStress(j, 0, 0, j, s.cx, s.cy, -10);
 	const J = 0.9 * 0.9;
 	assert.ok(stress[0][0] < 0, "compression resists");
 	assert.ok(Math.abs(stress[0][0] - stress[1][1]) < 1e-6, "isotropic part equal");
@@ -94,10 +94,10 @@ test("actuation is area-preserving (det F unchanged)", () => {
 	// inside the muscle with con != 0 the stress at rest configuration is
 	// nonzero (that is the point of actuation) but J stays 1, so the
 	// volumetric term must vanish: trace equals deviatoric-only trace.
-	const con = 0.2;
-	const stress = s.edgeStress(1, 0, 0, 1, s.cx + 1, s.cy + 1, -10, con);
+	const stress = s.edgeStress(1, 0, 0, 1, s.cx + 1, s.cy + 1, -10);
 	// with kappa(J-1) = 0, trace = G*(trB - 2*(trB+1)/3)
-	const fac = Math.exp(con * s.refCoord(s.cx + 1, s.cy + 1)[1]);
+	const [Xr, Yr] = s.refCoord(s.cx + 1, s.cy + 1);
+	const fac = Math.exp(s.contraction(Xr) * Yr);
 	const trB = fac * fac + 1 / (fac * fac);
 	const expected = s.G * (trB - 2 * (trB + 1) / 3);
 	assert.ok(Math.abs(stress[0][0] + stress[1][1] - expected) < 1e-6);

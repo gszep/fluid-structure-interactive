@@ -24,6 +24,8 @@ const W = array<f32, 9>(
     1.0 / 9.0, 1.0 / 9.0, 1.0 / 9.0, 1.0 / 9.0,
     1.0 / 36.0, 1.0 / 36.0, 1.0 / 36.0, 1.0 / 36.0,
 );
+// opposite directions, for the TRT collision operator
+const OPP = array<i32, 9>(0, 3, 4, 1, 2, 7, 8, 5, 6);
 
 struct Params {
     size: vec2<u32>,           // simulation grid size
@@ -50,7 +52,7 @@ struct Params {
     heal: f32,                 // anchored scenes: relax xi toward the ideal
                                // rigidly-rotated map (analytic substitute
                                // for the paper's extrapolation zone)
-    pad0: f32,
+    wave_number: f32,          // flapper: traveling-wave number of the muscle
     pad1: f32,
 };
 

@@ -10,6 +10,7 @@ export const C: number[][] = [
 	[1, 1], [-1, 1], [-1, -1], [1, -1],
 ];
 export const WEIGHTS: number[] = [4 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 36, 1 / 36, 1 / 36, 1 / 36];
+export const OPP: number[] = [0, 3, 4, 1, 2, 7, 8, 5, 6]; // opposite directions (TRT)
 
 export const wrap = (x: number, n: number): number => ((x % n) + n) % n;
 export const unwrap = (v: number, ref: number, n: number): number => v - n * Math.round((v - ref) / n);
@@ -89,6 +90,7 @@ export interface SolverParams {
 	anchorRange?: number;
 	friction?: number;
 	heal?: number;
+	waveNumber?: number;
 	diffusionRate?: number;
 	diffusionFrom?: number;
 	diffusionTo?: number;
@@ -130,6 +132,7 @@ export class Solver {
 	anchorRange!: number;
 	friction!: number;
 	heal!: number;
+	waveNumber!: number;
 	diffusionRate!: number;
 	diffusionFrom!: number;
 	diffusionTo!: number;
@@ -165,6 +168,7 @@ export class Solver {
 			anchorRange: 4,
 			friction: 0,
 			heal: 0,
+			waveNumber: 0,
 			// far-field xi diffusion: rate * smoothstep(from * eps, to * eps, phi)
 			diffusionRate: 0.3,
 			diffusionFrom: 1,
@@ -271,9 +275,10 @@ export class Solver {
 		return [mx / Math.max(rho, 1e-6), my / Math.max(rho, 1e-6)];
 	}
 
-	contraction(): number {
-		const s = Math.sin(this.actuationFreq * this.step_);
-		return -this.actuationAmp * s * s;
+	/** Flapper muscle activation: a wave traveling along the body. */
+	contraction(X: number): number {
+		const s = Math.sin(this.actuationFreq * this.step_ - this.waveNumber * X);
+		return -this.actuationAmp * s;
 	}
 
 	clampMag(vx: number, vy: number, m: number): [number, number] {
@@ -281,7 +286,7 @@ export class Solver {
 		return l > m ? [vx * m / l, vy * m / l] : [vx, vy];
 	}
 
-	edgeStress(Xx: number, Xy: number, Yx: number, Yy: number, Xe: number, Ye: number, phiE: number, con: number): number[][] {
+	edgeStress(Xx: number, Xy: number, Yx: number, Yy: number, Xe: number, Ye: number, phiE: number): number[][] {
 		const sf = this.solidFraction(phiE);
 		if (sf <= 0) return [[0, 0], [0, 0]];
 		const det = Xx * Yy - Xy * Yx;
@@ -291,7 +296,7 @@ export class Solver {
 		if (this.shape === 0) {
 			const [Xr, Yr] = this.refCoord(Xe, Ye);
 			const muscle = this.solidFraction(capsule(Xr, Yr, this.muscleHalfLength, this.muscleRadius));
-			const fac = Math.min(2, Math.max(0.5, Math.exp(con * Yr * muscle)));
+			const fac = Math.min(2, Math.max(0.5, Math.exp(this.contraction(Xr) * Yr * muscle)));
 			F11 *= fac; F21 *= fac; F12 /= fac; F22 /= fac;
 		}
 
@@ -307,7 +312,7 @@ export class Solver {
 	}
 
 	/** Divergence of the solid stress at node (x, y) from the xi field. */
-	solidForce(x: number, y: number, con: number): [number, number] {
+	solidForce(x: number, y: number): [number, number] {
 		const { width: W, height: H } = this;
 		const k = y * W + x, cX = this.xiX[k], cY = this.xiY[k];
 		const nb = (dx: number, dy: number): [number, number] => {
@@ -336,19 +341,19 @@ export class Solver {
 		const sL = this.edgeStress(
 			cc[0] - ll[0], 0.25 * (uu[0] + ul[0] - dd[0] - dl[0]),
 			cc[1] - ll[1], 0.25 * (uu[1] + ul[1] - dd[1] - dl[1]),
-			0.5 * (cc[0] + ll[0]), 0.5 * (cc[1] + ll[1]), 0.5 * (phi(cc) + phi(ll)), con);
+			0.5 * (cc[0] + ll[0]), 0.5 * (cc[1] + ll[1]), 0.5 * (phi(cc) + phi(ll)));
 		const sR = this.edgeStress(
 			rr[0] - cc[0], 0.25 * (ur[0] + uu[0] - dr[0] - dd[0]),
 			rr[1] - cc[1], 0.25 * (ur[1] + uu[1] - dr[1] - dd[1]),
-			0.5 * (rr[0] + cc[0]), 0.5 * (rr[1] + cc[1]), 0.5 * (phi(rr) + phi(cc)), con);
+			0.5 * (rr[0] + cc[0]), 0.5 * (rr[1] + cc[1]), 0.5 * (phi(rr) + phi(cc)));
 		const sB = this.edgeStress(
 			0.25 * (rr[0] + dr[0] - ll[0] - dl[0]), cc[0] - dd[0],
 			0.25 * (rr[1] + dr[1] - ll[1] - dl[1]), cc[1] - dd[1],
-			0.5 * (cc[0] + dd[0]), 0.5 * (cc[1] + dd[1]), 0.5 * (phi(cc) + phi(dd)), con);
+			0.5 * (cc[0] + dd[0]), 0.5 * (cc[1] + dd[1]), 0.5 * (phi(cc) + phi(dd)));
 		const sT = this.edgeStress(
 			0.25 * (ur[0] + rr[0] - ul[0] - ll[0]), uu[0] - cc[0],
 			0.25 * (ur[1] + rr[1] - ul[1] - ll[1]), uu[1] - cc[1],
-			0.5 * (uu[0] + cc[0]), 0.5 * (uu[1] + cc[1]), 0.5 * (phi(uu) + phi(cc)), con);
+			0.5 * (uu[0] + cc[0]), 0.5 * (uu[1] + cc[1]), 0.5 * (phi(uu) + phi(cc)));
 
 		let Fx = (sR[0][0] - sL[0][0]) + (sT[0][1] - sB[0][1]);
 		let Fy = (sR[1][0] - sL[1][0]) + (sT[1][1] - sB[1][1]);
@@ -397,12 +402,11 @@ export class Solver {
 
 	advance(): void {
 		const { width: W, height: H } = this;
-		const con = this.contraction();
 		// ---- pass 1: advect xi (with the half-force corrected velocity) ----
 		const nxiX = new Float32Array(W * H), nxiY = new Float32Array(W * H);
 		for (let y = 0; y < H; y++)
 			for (let x = 0; x < W; x++) {
-				const [Fx0, Fy0] = this.solidForce(x, y, con);
+				const [Fx0, Fy0] = this.solidForce(x, y);
 				const [, u, v] = this.hydroVelocity(x, y, Fx0, Fy0);
 				const k = y * W + x, cX = this.xiX[k], cY = this.xiY[k];
 				const g = (dx: number, dy: number, c: number, arr: Float32Array, n: number) => unwrap(arr[this.idx(x + dx, y + dy)], c, n);
@@ -454,7 +458,7 @@ export class Solver {
 		for (let y = 0; y < H; y++)
 			for (let x = 0; x < W; x++) {
 				const k = y * W + x;
-				const [Fx0, Fy0] = this.solidForce(x, y, con);
+				const [Fx0, Fy0] = this.solidForce(x, y);
 				const f = this.pull(x, y);
 				let [rho, u, v, Fx, Fy] = this.hydroVelocity(x, y, Fx0, Fy0);
 				// weak Rayleigh friction (momentum sink for anchored scenes)
@@ -462,12 +466,19 @@ export class Solver {
 				v *= 1 - this.friction;
 
 				const feq = equilibrium(rho, u, v);
-				const itau = 1 / this.tau, fw = 1 - 0.5 * itau;
+				// TRT collision: even modes with 1/tau, odd modes with the
+				// magic combination Lambda = 1/4 (stability at low viscosity)
+				const wp = 1 / this.tau;
+				const wm = 1 / (0.5 + 0.25 / (this.tau - 0.5));
+				const fw = 1 - 0.5 * wp;
 				for (let i = 0; i < 9; i++) {
+					const j = OPP[i];
+					const fp = 0.5 * (f[i] + f[j]), fm = 0.5 * (f[i] - f[j]);
+					const ep = 0.5 * (feq[i] + feq[j]), em = 0.5 * (feq[i] - feq[j]);
 					const Fi = WEIGHTS[i] * (
 						3 * ((C[i][0] - u) * Fx + (C[i][1] - v) * Fy) +
 						9 * (C[i][0] * u + C[i][1] * v) * (C[i][0] * Fx + C[i][1] * Fy));
-					nf[i][k] = f[i] - itau * (f[i] - feq[i]) + fw * Fi;
+					nf[i][k] = f[i] - wp * (fp - ep) - wm * (fm - em) + fw * Fi;
 				}
 			}
 		this.f = nf;

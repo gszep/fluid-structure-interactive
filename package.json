@@ -6,6 +6,7 @@
   "scripts": {
     "test": "node --test \"test/*.test.ts\"",
     "test:e2e": "node --test test/e2e.ts",
+    "validate-wgsl": "node scripts/validate-wgsl.mjs",
     "typecheck": "tsc --noEmit --strict --module nodenext --moduleResolution nodenext --target es2022 --allowImportingTsExtensions --skipLibCheck test/*.ts",
     "watch": "webpack --watch",
     "start": "webpack serve --open",
