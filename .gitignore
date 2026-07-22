@@ -5,6 +5,9 @@ node_modules
 *.js.map
 *.js
 
+# generated builds
+cuda/build/
+
 # webpack
 !docs/index.html
 !docs/index.bundle.js
