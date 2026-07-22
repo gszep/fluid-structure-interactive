@@ -171,7 +171,7 @@ export class Solver {
 			waveNumber: 0,
 			// far-field xi diffusion: rate * smoothstep(from * eps, to * eps, phi)
 			diffusionRate: 0.3,
-			diffusionFrom: 1,
+			diffusionFrom: 0.5,
 			diffusionTo: 3,
 		};
 		Object.assign(this, defaults, params);
@@ -305,9 +305,11 @@ export class Solver {
 		const B12 = F11 * F21 + F12 * F22;
 		const B22 = F21 * F21 + F22 * F22;
 		const tr = (B11 + B22 + 1) / 3;
+		// volumetric term (J - 1/J)/2: stiffer in compression than (J - 1)
+		const vol = this.kappa * 0.5 * (J - 1 / J);
 		return [
-			[sf * (this.G * (B11 - tr) + this.kappa * (J - 1)), sf * this.G * B12],
-			[sf * this.G * B12, sf * (this.G * (B22 - tr) + this.kappa * (J - 1))],
+			[sf * (this.G * (B11 - tr) + vol), sf * this.G * B12],
+			[sf * this.G * B12, sf * (this.G * (B22 - tr) + vol)],
 		];
 	}
 

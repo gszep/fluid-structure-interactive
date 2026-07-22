@@ -216,11 +216,15 @@ __device__ inline Mat2 edge_stress(float Xx, float Xy, float Yx, float Yy,
     float B22 = F21 * F21 + F22 * F22;
     float tr = (B11 + B22 + 1.f) / 3.f;
     float G = par.shear_modulus, K = par.bulk_modulus;
+    // volumetric term (J - 1/J)/2: same linearization as (J - 1) at J = 1
+    // but much stiffer in compression, resisting the slow "puffing" of
+    // vigorously actuated bodies
+    float vol = K * 0.5f * (J - 1.f / J);
     Mat2 s;
-    s.a = sf * (G * (B11 - tr) + K * (J - 1.f));
+    s.a = sf * (G * (B11 - tr) + vol);
     s.b = sf * (G * B12);
     s.c = sf * (G * B12);
-    s.d = sf * (G * (B22 - tr) + K * (J - 1.f));
+    s.d = sf * (G * (B22 - tr) + vol);
     return s;
 }
 
@@ -601,7 +605,7 @@ int main(int argc, char** argv) {
     p.force_clamp = 0.2f;
     p.velocity_clamp = 0.25f;
     p.diffusion_rate = 0.3f;
-    p.diffusion_from = 1.f;
+    p.diffusion_from = 0.5f;
     p.diffusion_to = 3.f;
 
     // overrides

@@ -85,7 +85,7 @@ test("volumetric compression produces negative pressure ~ kappa(J-1)", () => {
 	const J = 0.9 * 0.9;
 	assert.ok(stress[0][0] < 0, "compression resists");
 	assert.ok(Math.abs(stress[0][0] - stress[1][1]) < 1e-6, "isotropic part equal");
-	const volumetric = s.kappa * (J - 1);
+	const volumetric = s.kappa * 0.5 * (J - 1 / J);
 	assert.ok(Math.abs(0.5 * (stress[0][0] + stress[1][1]) - volumetric) < 0.01);
 });
 

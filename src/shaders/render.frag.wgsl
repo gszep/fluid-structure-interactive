@@ -37,15 +37,20 @@ fn main(input: Input) -> Output {
     let speed = length(velocity(x));
 
     var color = vec3<f32>(0.03, 0.04, 0.06);
-    let w = clamp(vort * 150.0, -1.0, 1.0);
-    color += max(w, 0.0) * vec3<f32>(0.9, 0.25, 0.1);
-    color += max(-w, 0.0) * vec3<f32>(0.1, 0.4, 0.9);
-    color += min(speed * 3.0, 0.5) * vec3<f32>(0.25, 0.25, 0.3);
-
-    // solid: shaded with its (deformed) reference-space grid
     let xi = xi_at(x);
     let phi = level_set_at(xi, vec2<f32>(x));
-    let lambda = solid_fraction(phi);
+
+    // vorticity glow, faded near the interface where it only shows
+    // single-cell blur-zone dither
+    let fade = smoothstep(0.0, 3.0 * params.epsilon, phi);
+    let w = clamp(vort * 150.0, -1.0, 1.0) * fade;
+    color += max(w, 0.0) * vec3<f32>(0.9, 0.25, 0.1);
+    color += max(-w, 0.0) * vec3<f32>(0.1, 0.4, 0.9);
+    color += min(speed * 3.0, 0.5) * fade * vec3<f32>(0.25, 0.25, 0.3);
+
+    // solid: a crisp edge (sharpened solid fraction) shaded with its
+    // (deformed) reference-space grid
+    let lambda = smoothstep(0.3, 0.7, solid_fraction(phi));
     if (lambda > 0.0) {
         let X = reference_coord(xi);
         let g = cos(X.x * PI / 4.0) * cos(X.y * PI / 4.0);

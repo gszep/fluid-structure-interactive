@@ -85,7 +85,9 @@ fn advect(@builtin(global_invocation_id) gid: vec3<u32>) {
     // otherwise condense into phantom solid fragments in the wake, while the
     // solid interior (phi < 0) is untouched.
     let phi_here = level_set_at(c, vec2<f32>(x));
-    let w = 0.3 * smoothstep(params.epsilon, 3.0 * params.epsilon, phi_here);
+    // starting inside the outer half of the blur zone (0.5 eps) erodes the
+    // interface dither that otherwise inflates swimming bodies
+    let w = 0.3 * smoothstep(0.5 * params.epsilon, 3.0 * params.epsilon, phi_here);
     xi_new = mix(xi_new, 0.25 * (r1 + l1 + u1 + d1), w);
 
     // Anchored scenes: the drive angle is known exactly, so the ideal
@@ -157,12 +159,16 @@ fn edge_stress(jac: mat2x2<f32>, xi_edge: vec2<f32>, phi_edge: f32) -> mat2x2<f3
         F[1] *= 1.0 / fac;
     }
 
-    // Compressible neo-Hookean constitutive law (plane strain)
+    // Compressible neo-Hookean constitutive law (plane strain). The
+    // volumetric term (J - 1/J)/2 linearizes like (J - 1) at J = 1 but is
+    // much stiffer in compression, resisting the slow "puffing" of
+    // vigorously actuated bodies.
     let J = clamp(1.0 / det, 0.1, 10.0);
     let B = F * transpose(F);
     let I = mat2x2<f32>(vec2<f32>(1.0, 0.0), vec2<f32>(0.0, 1.0));
     let dev = B - ((B[0][0] + B[1][1] + 1.0) / 3.0) * I;
-    return sf * (params.shear_modulus * dev + params.bulk_modulus * (J - 1.0) * I);
+    let vol = params.bulk_modulus * 0.5 * (J - 1.0 / J);
+    return sf * (params.shear_modulus * dev + vol * I);
 }
 
 // Divergence of the solid stress at node x, plus the user interaction force.
