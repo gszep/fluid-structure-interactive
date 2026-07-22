@@ -46,6 +46,7 @@ struct Params {
                              // rigidly-rotated map (analytic "extrapolation")
     float magic;             // TRT magic parameter Lambda (1/4 = stability)
     float wave_number;       // flapper: traveling-wave number of the muscle
+    float pulse_power;       // > 1: one-sided sin^8 pulses (JFM 2020)
 };
 
 __constant__ Params par;
@@ -186,6 +187,12 @@ __device__ inline float3 moments(const float* f) {
 // the active stretch exp(con * Y), bending the body locally.
 __device__ inline float contraction(int step, float X) {
     float s = sinf(par.actuation_freq * step - par.wave_number * X);
+    if (par.pulse_power > 1.f) {
+        // one-sided pulses sin^8 (JFM 2020 eq. 4.8): bend, then relax while
+        // the passive ends flap elastically like a fish tail
+        float s2 = s * s, s4 = s2 * s2;
+        return -par.actuation_amp * s4 * s4;
+    }
     return -par.actuation_amp * s;
 }
 
@@ -570,6 +577,7 @@ int main(int argc, char** argv) {
     float scale = fminf(p.width, p.height);
     p.magic = 0.25f;
     p.wave_number = 0.f;
+    p.pulse_power = 1.f;
     float L = scale;
 
     // defaults mirroring src/index.ts scene settings
@@ -589,13 +597,15 @@ int main(int argc, char** argv) {
         p.spin_angle = PI; p.spin_freq = 2.f * PI / 54000.f;
     } else { // flapper
         p.shape = 0;
-        p.tau = 0.55f; p.shear_modulus = 0.06f; p.bulk_modulus = 0.18f;
+        // slender swimmer (aspect ~10, JFM 2020 Fig. 9 proportions): a thin
+        // body bends globally under the muscle wave instead of rippling
+        p.tau = 0.55f; p.shear_modulus = 0.15f; p.bulk_modulus = 0.45f;
         p.cx = p.width / 2.f; p.cy = p.height / 2.f;
-        p.half_length = 0.1f * scale; p.radius = 0.035f * scale;
-        p.muscle_half_length = 0.085f * scale; p.muscle_radius = 0.022f * scale;
-        p.actuation_amp = 1.2f / p.muscle_radius;
-        p.actuation_freq = 2.f * PI / 300.f;
-        p.wave_number = 35.8f / scale;
+        p.half_length = 0.15f * scale; p.radius = 0.0174f * scale;
+        p.muscle_half_length = 0.085f * scale; p.muscle_radius = 0.014f * scale;
+        p.actuation_amp = logf(4.f) / p.muscle_radius; // max stretch 4x
+        p.actuation_freq = 2.f * PI / 900.f;
+        p.wave_number = 21.f / scale;
     }
     p.epsilon = 2.f;
     p.anchor_strength = 0.02f;
@@ -627,6 +637,7 @@ int main(int argc, char** argv) {
     p.heal = argf(argc, argv, "--heal", p.heal);
     p.magic = argf(argc, argv, "--magic", p.magic);
     p.wave_number = argf(argc, argv, "--wavek", p.wave_number);
+    p.pulse_power = argf(argc, argv, "--pulse", p.pulse_power);
     float period = argf(argc, argv, "--period", 2.f * PI / fmaxf(p.actuation_freq, 1e-9f));
     if (p.shape == 0) p.actuation_freq = 2.f * PI / period;
     p.force_clamp = argf(argc, argv, "--fclamp", p.force_clamp);

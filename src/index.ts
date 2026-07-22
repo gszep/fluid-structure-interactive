@@ -44,7 +44,7 @@ async function main(): Promise<void> {
 	// prong length 0.2L and pivot radius 0.025L; the lattice pitch is L/2 of
 	// the shorter screen dimension, so facing prongs exactly touch
 	const L = Math.min(grid.width, grid.height);
-	const muscleRadius = 0.022 * scale;
+	const muscleRadius = 0.014 * scale;
 	// Anchored-rotor parameters were tuned with the CUDA reference
 	// (cuda/lbrmt.cu): stable over 4+ full cycles at 448^2 with
 	// tau=0.8, G=0.05, kappa=0.15, T=54000, friction=heal=3e-4.
@@ -53,29 +53,32 @@ async function main(): Promise<void> {
 		// operator keeps tau = 0.55 stable (Re high enough for vortex
 		// shedding); the soft four-rotor lattice prefers a calmer fluid.
 		tau: shape === 2 ? 0.7 : 0.55,
-		shearModulus: shape === 0 ? 0.06 : 0.05,
-		bulkModulus: shape === 0 ? 0.18 : 0.15, // kappa ~ 3G
+		// the flapper needs a stiff body so actuation changes its overall
+		// shape (elastic traverse time << stroke period) instead of rippling
+		// through it like jelly; TRT keeps this stable
+		shearModulus: shape === 0 ? 0.15 : 0.05,
+		bulkModulus: shape === 0 ? 0.45 : 0.15, // kappa ~ 3G
 		epsilon: 2.0, // blur-zone half-width (cells)
 		center:
 			shape === 2
 				? [grid.width / 4, grid.height / 4]
 				: [grid.width / 2, grid.height / 2],
-		// flapper: capsule half-length; rotor: star tip radius;
+		// flapper: slender body (aspect ~10, JFM 2020 Fig. 9 proportions) so
+		// the muscle wave curves the whole body; rotor: star tip radius;
 		// rotors: smooth-rotor prong length (slightly under 0.2L so adjacent
 		// prongs get close but do not weld - min-SDF has no object identity)
-		halfLength: shape === 2 ? 0.174 * L : shape === 1 ? 0.16 * scale : 0.1 * scale,
+		halfLength: shape === 2 ? 0.174 * L : shape === 1 ? 0.16 * scale : 0.15 * scale,
 		// flapper: capsule radius; rotor: star dilation (fattens the wedge arms,
 		// whose bending stiffness goes as thickness^3); rotors: end-cap radius
-		radius: shape === 2 ? 0.04 * L : shape === 1 ? 0.04 * scale : 0.035 * scale,
+		radius: shape === 2 ? 0.04 * L : shape === 1 ? 0.04 * scale : 0.0174 * scale,
 		muscleHalfLength: 0.085 * scale, // muscle spans most of the body
 		// flapper: muscle radius; rotors: prong fillet radius
 		muscleRadius: shape === 2 ? 0.04 * L : muscleRadius,
-		// max |con * Y| ~ 1.2 at the muscle edge (tuned in CUDA: strong
-		// enough for ~1 body length per 20 strokes)
-		actuationAmp: 1.2 / muscleRadius,
-		actuationFreq: (2 * Math.PI) / 300, // one stroke every 300 steps
-		// traveling-wave number: wavelength ~ 0.9 body lengths
-		waveNumber: 35.8 / scale,
+		actuationAmp: Math.log(4.0) / muscleRadius, // max active stretch 4x
+		actuationFreq: (2 * Math.PI) / 900, // one stroke every 900 steps
+		// traveling-wave number: wavelength ~ 1.5 body lengths, so the whole
+		// body curves rather than rippling
+		waveNumber: 21 / scale,
 		shape: shape,
 		pivotRadius: 0.1 * (shape === 2 ? L : scale),
 		spinAngle: Math.PI, // theta(t) = spinAngle * (1 - cos(spinFreq t))

@@ -44,23 +44,24 @@ test("poked solid deforms, recovers its area, and the flow settles", () => {
 });
 
 test("actuated flapper swims without destroying itself", () => {
-	const period = 300;
+	const period = 900;
 	const s = new Solver({
 		width: 128, height: 96, cx: 64, cy: 48, tau: 0.55,
-		halfLength: 12, radius: 4.5,
-		muscleHalfLength: 10, muscleRadius: 2.6,
-		actuationAmp: 1.2 / 2.6, // max |con * Y| ~ 1.2 at the muscle edge
+		G: 0.15, kappa: 0.45, // stiff: whole-body curvature, not jelly waves
+		halfLength: 19, radius: 2.3, // slender (JFM 2020 proportions)
+		muscleHalfLength: 11, muscleRadius: 1.9,
+		actuationAmp: Math.log(4.0) / 1.9, // max active stretch 4x
 		actuationFreq: (2 * Math.PI) / period,
-		waveNumber: 35.8 / 96, // traveling wave, ~0.9 body lengths
+		waveNumber: 0.16, // traveling wave
 	});
 	const before = s.diagnostics();
-	s.run(4 * period);
+	s.run(1.5 * period);
 	const after = s.diagnostics();
 
 	assert.strictEqual(after.invalid, 0);
 	assert.ok(Math.abs(after.meanDensity - 1) < 1e-3, "mass conserved");
 	const areaChange = Math.abs(after.solidArea - before.solidArea) / before.solidArea;
-	assert.ok(areaChange < 0.35, `solid area drift ${(areaChange * 100).toFixed(1)}%`);
+	assert.ok(areaChange < 0.15, `solid area drift ${(areaChange * 100).toFixed(1)}%`);
 
 	// small bodies swim slowly in cell units (CUDA at production scale
 	// covers the fast-swimming assertion); here we check net locomotion
@@ -68,6 +69,6 @@ test("actuated flapper swims without destroying itself", () => {
 		after.centroid[0] - before.centroid[0],
 		after.centroid[1] - before.centroid[1]
 	);
-	assert.ok(drift > 0.35, `flapper swam ${drift.toFixed(2)} cells in 4 strokes`);
+	assert.ok(drift > 0.7, `flapper swam ${drift.toFixed(2)} cells in 1.5 strokes`);
 	assert.ok(after.maxVelocity < 0.3, "velocities stay subsonic");
 });

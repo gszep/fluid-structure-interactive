@@ -85,13 +85,13 @@ test("CUDA: four-rotor lattice survives a full revolution cycle", { skip: !avail
 });
 
 test("CUDA: flapper actually swims (~1 body length / 20 strokes)", { skip: !available }, () => {
-	const rows = run(["--scene", "flapper", "--n", "448", "--steps", "8000", "--report", "2000"]);
+	const rows = run(["--scene", "flapper", "--n", "448", "--steps", "12000", "--report", "3000"]);
 	for (const r of rows) {
 		assert.strictEqual(r.invalid, 0);
 		assert.ok(Math.abs(r.mass - 1) < 0.005);
-		assert.ok(Math.abs(r.area_pct) < 35, `area drift ${r.area_pct}%`);
+		assert.ok(Math.abs(r.area_pct) < 15, `area drift ${r.area_pct}%`);
 		assert.ok(r.maxv < 0.4);
 	}
 	const last = rows[rows.length - 1];
-	assert.ok(last.drift > 20, `flapper swam ${last.drift} cells in 8000 steps`);
+	assert.ok(last.drift > 25, `flapper swam ${last.drift} cells in 12000 steps`);
 });
